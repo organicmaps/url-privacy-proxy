@@ -100,6 +100,11 @@ async function getCoordinates(request) {
                         address[address.length - 1] = address[address.length - 1].substring(1)
                     }
                     var link = address[address.length - 1]
+                    link = link.split('?')[0]
+                    if (link.split(',').length>1){
+                       lati =  link.split(',')[0]
+                       lng =  link.split(',')[1]
+                    }
                     const regex = /\+/ig
                     var ad = link
                 } else if (path.startsWith('/maps/dir/')) {
@@ -306,6 +311,17 @@ async function getCoordinates(request) {
                 }
             }
         })
+    lati = decodeURIComponent(decodeURIComponent(lati.toString())).trim()
+    lng = decodeURIComponent(decodeURIComponent(lng.toString())).trim() 
+    if (lati.charAt(0)==='+') {
+        lati = lati.substring(1)
+    }
+    if (lng.charAt(0)==='+') {
+        lng = lng.substring(1)
+    }
+    lati = parseFloat(lati)
+    lng = parseFloat(lng)
+    reqBody = `geo:${lati},${lng}`
     var reqDesc = {
         geo: `${reqBody}`,
         openstreetmap: `https://www.openstreetmap.org/?mlat=${lati}&mlon=${lng}`

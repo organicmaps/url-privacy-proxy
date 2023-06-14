@@ -1,6 +1,9 @@
+// The logic of the proxy is that in the backend code of the site, there lies its coordinates but are located absurdly at different locations when made sepearate calls, but always along with a URI starting with "https://www.google.com/maps/preview/place/" or if not there then with "https://maps.google.com/maps/api/staticmap?center=". Note that if the first URI is not there then only we have to look up for the second one.
+
 import { Router, Request} from 'itty-router'
 import * as cheerio from 'cheerio';
 const router = Router()
+// The main function to get coordinates from a specific url which is called in redirect or search route.
 async function getCoordinates(request) {
 	async function gatherResponse(response) {
         const { headers } = response;
@@ -22,9 +25,7 @@ async function getCoordinates(request) {
 		  request.query.url = encodeURI(request.query.url + string)
 		}
 	  }
-	  var flag=0
 	  var originalUrl = request.query.url
-	  var ol = request.query.url
       await fetch(request.query.url, {
 		headers: {
 			"User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0",
@@ -49,9 +50,8 @@ async function getCoordinates(request) {
 		url = url.toString()
 		url = encodeURI(url)
 		const urlObj = new URL(url);
-		const continueParam = urlObj.searchParams.get("continue");
+		const continueParam = urlObj.searchParams.get("continue"); // sometimes while using the proxy and sending an request to the specific URI, it returns with www.google.com/sorry?continue={UNSHORTENED URI} , so this step becomes neccesary.
 		if (continueParam) {
-			flag=1
 			url = decodeURIComponent(continueParam)
 			originalUrl = decodeURIComponent(continueParam)
 			reqBody = url
@@ -59,7 +59,7 @@ async function getCoordinates(request) {
 		  }
 		 var {pathname,host,hash,search} = new URL(url)
 		 var newUrl = pathname
-		 const array = newUrl.split('/')
+		 const array = newUrl.split('/')  
 		 if (host==='www.google.com' || host==='maps.google.com')
 		 {
 			async function gatherResponse(response) {

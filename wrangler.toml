@@ -1,5 +1,5 @@
 name = "url-un"
-main = "src/worker.ts"
+main = "index.ts"
 compatibility_date = "2023-05-19"
 
 # # KV Namespace binding - For more information: https://developers.cloudflare.com/workers/runtime-apis/kv

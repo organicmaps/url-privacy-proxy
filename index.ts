@@ -1,9 +1,11 @@
-// The logic of the proxy is that in the backend code of the site, there lies its coordinates but are located absurdly at different locations when made sepearate calls, but always along with a URI starting with "https://www.google.com/maps/preview/place/" or if not there then with "https://maps.google.com/maps/api/staticmap?center=". Note that if the first URI is not there then only we have to look up for the second one.
+import { Router } from 'itty-router'
 
-import { Router, Request} from 'itty-router'
-import * as cheerio from 'cheerio';
+// Create a new router
 const router = Router()
-// The main function to get coordinates from a specific url which is called in redirect or search route.
+
+/*
+Our index route, a simple hello world.
+*/
 async function getCoordinates(request) {
 	async function gatherResponse(response) {
         const { headers } = response;
@@ -115,25 +117,56 @@ async function getCoordinates(request) {
     const json = JSON.stringify(retBody, null, 2);
 	return json
 }
+
 router.get('/search',async request => {
-   var json = await getCoordinates(request)
-    return new Response(json, {
-		headers: {
-		  "content-type": "application/json;charset=UTF-8",
-		},
-	  }); 
+    var json = await getCoordinates(request)
+     return new Response(json, {
+         headers: {
+           "content-type": "application/json;charset=UTF-8",
+         },
+       }); 
+ })
+ router.get('/redirect',async request => {
+     var json = await getCoordinates(request)
+     json = JSON.parse(json)
+     var link = json.url.geo
+     return Response.redirect(link)
+ })
+ .get('*',(request:Request) => {
+     return new Response(
+         JSON.stringify({error:'hey'})
+     )
+ })
+
+/*
+This route demonstrates path parameters, allowing you to extract fragments from the request
+URL.
+
+Try visit /example/hello and see the response.
+*/
+
+/*
+This shows a different HTTP method, a POST.
+
+Try send a POST request using curl or another tool.
+
+Try the below curl command to send JSON:
+
+$ curl -X POST <worker> -H "Content-Type: application/json" -d '{"abc": "def"}'
+*/
+
+/*
+This is the last route we define, it will match anything that hasn't hit a route we've defined
+above, therefore it's useful as a 404 (and avoids us hitting worker exceptions, so make sure to include it!).
+
+Visit any page that doesn't exist (e.g. /foobar) to see it in action.
+*/
+router.all("*", () => new Response("404, not found!", { status: 404 }))
+
+/*
+This snippet ties our worker to the router we deifned above, all incoming requests
+are passed to the router where your routes are called and the response is sent.
+*/
+addEventListener('fetch', (e) => {
+  e.respondWith(router.handle(e.request))
 })
-router.get('/redirect',async request => {
-	var json = await getCoordinates(request)
-	json = JSON.parse(json)
-	var link = json.url.geo
-	return Response.redirect(link)
-})
-.get('*',(request:Request) => {
-    return new Response(
-        JSON.stringify({error:'hey'})
-    )
-})
-export function handleRequest(request: Request) {
-    return router.handle(request)
-}

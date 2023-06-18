@@ -1,16 +1,19 @@
 # url-privacy-proxy
 Extracts coordinates from google-encoded urls without exposing clients' IP addresses
-## Installation
 
-Build the proxy by running following commands.
-(Make Sure you are logged into wrangler)
+URIs like https://maps.app.goo.gl/Ce7zkj2X8oUy3Se49?g_st=ic are unshortened and coordinates are extracted from them which suits OM.
+
+
+[![Deploy master to Production](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/organicmaps/url-processor)
+
+## Requirements
+
+Install CloudFlare's wrangler and other dev dependencies using npm:
 
 ```bash
-  npm install 
+npm i
 ```
 
-```bash
-  wrangler dev
-```
-The proxy would be running on your local machine now.
-    
+## Development
+
+Use `npx wrangler dev` for development using Cloudflare, or `npx wrangler dev --local` for localhost development.

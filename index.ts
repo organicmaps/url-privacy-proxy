@@ -1,10 +1,11 @@
 import { Router } from 'itty-router'
 import { getCoordinates } from './src/coordinates'
 
+
 const router = Router()
 
 router.get('/search',async request => {
-    var json = await getCoordinates(request)
+    const json = await getCoordinates(request)
      return new Response(json, {
          headers: {
            "content-type": "application/json;charset=UTF-8",
@@ -13,9 +14,9 @@ router.get('/search',async request => {
  })
 
  router.get('/redirect',async request => {
-     var json = await getCoordinates(request)
+     let json = await getCoordinates(request)
      json = JSON.parse(json)
-     var link = json.url.geo
+     const link = json.url.geo
      return Response.redirect(link)
  })
 

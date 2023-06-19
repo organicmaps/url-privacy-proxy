@@ -1,18 +1,13 @@
-on:
-  push:
-  pull_request:
+name: Lint Code Base
+
+on: push
 
 jobs:
-  eslint:
-    name: eslint
+  super-lint:
+    name: Lint Code Base
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: install node v12
-      uses: actions/setup-node@v1
-      with:
-        node-version: 12
-    - name: npm install
-      run: npm install
-    - name: eslint
-      uses: icrawl/action-eslint@v1
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+ 

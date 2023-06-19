@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        - uses: actions/checkout@v3
+        - uses: bahmutov/npm-install@v1
+        - run: npm run format
+        - run: git status
 
  

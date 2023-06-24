@@ -3,7 +3,7 @@ import { getCoordinates } from './src/coordinates';
 
 const router = Router();
 
-router.get('/search', async (request) => {
+router.get('/coordinates', async (request) => {
   const json = await getCoordinates(request);
   return new Response(json, {
     headers: {

@@ -73,22 +73,22 @@ export async function getCoordinates(request) {
         var results = await gatherResponse(response);
         try 
         {
-          var pos = results.indexOf(';markers');
-          var link = results.substring(pos - 1, pos + 70);
+          var position = results.indexOf(';markers');
+          var link = results.substring(position - 1, position + 70);
           link = link.split('=')[1]
           lati = link.split('%2C')[0]
           lng = link.split('%2C')[1].split('%7C')[0]
         }
         catch {
-          pos = results.indexOf('https://www.google.com/maps/preview/place/');
-          link = results.substring(pos - 1, pos + 250);
+          position = results.indexOf('https://www.google.com/maps/preview/place/');
+          link = results.substring(position - 1, position + 250);
           var val = link.split('@')[1];
           try {
             lati = val.split(',')[0];
             lng = val.split(',')[1];
           } catch {
-            pos = results.indexOf('https://maps.google.com/maps/api/staticmap?center=');
-            link = results.substring(pos - 1, pos + 250);
+            position = results.indexOf('https://maps.google.com/maps/api/staticmap?center=');
+            link = results.substring(position - 1, position + 250);
             var latlng = link.split('=')[1];
             lati = latlng.split('%2C')[0];
             lng = latlng.split('%2C')[1].split('&')[0];

@@ -17,3 +17,7 @@ npm i
 ## Development
 
 Use `npx wrangler dev` for development using Cloudflare, or `npx wrangler dev --local` for localhost development.
+
+## Testing
+
+Run `npx wrangler dev` to host the proxy locally. Then open a new terminal and run `npm test` to test the proxy with some earlier feeded URIs.

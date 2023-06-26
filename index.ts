@@ -13,16 +13,16 @@ router.get('/coordinates', async (request) => {
 });
 
 router
-   .get('/redirect', async (request) => {
-     let json = await getCoordinates(request);
-     json = JSON.parse(json);
-     const link = json.url.geo;
-     return Response.redirect(link);
-   })
+  .get('/redirect', async (request) => {
+    let json = await getCoordinates(request);
+    json = JSON.parse(json);
+    const link = json.url.geo;
+    return Response.redirect(link);
+  })
 
-   .get('*', async (request) => {
-     return new Response(JSON.stringify({ error: 'hey' }));
-   });
+  .get('*', async (request) => {
+    return new Response(JSON.stringify({ error: 'hey' }));
+  });
 addEventListener('fetch', (e) => {
   e.respondWith(router.handle(e.request));
 });

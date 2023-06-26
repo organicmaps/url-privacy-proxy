@@ -30,7 +30,7 @@ export async function getCoordinates(request) {
     }
     return decodedURI;
   }
-  request.query.url = decodeURITillSame(request.query.url)
+  request.query.url = decodeURITillSame(request.query.url);
   var originalUrl = request.query.url;
   await fetch(request.query.url, {
     headers: {
@@ -71,15 +71,13 @@ export async function getCoordinates(request) {
         }
         var response = await fetch(url);
         var results = await gatherResponse(response);
-        try 
-        {
+        try {
           var position = results.indexOf(';markers');
           var link = results.substring(position - 1, position + 70);
-          link = link.split('=')[1]
-          lati = link.split('%2C')[0]
-          lng = link.split('%2C')[1].split('%7C')[0]
-        }
-        catch {
+          link = link.split('=')[1];
+          lati = link.split('%2C')[0];
+          lng = link.split('%2C')[1].split('%7C')[0];
+        } catch {
           position = results.indexOf('https://www.google.com/maps/preview/place/');
           link = results.substring(position - 1, position + 250);
           var val = link.split('@')[1];
@@ -98,7 +96,7 @@ export async function getCoordinates(request) {
     });
   lati = decodeURIComponent(decodeURIComponent(lati.toString())).trim();
   lng = decodeURIComponent(decodeURIComponent(lng.toString())).trim();
-  console.log(lati,lng)
+  console.log(lati, lng);
   if (lati.charAt(0) === '+') {
     lati = lati.substring(1);
   }

@@ -5,7 +5,7 @@
   "scripts": {
     "deploy": "wrangler publish",
     "start": "wrangler dev",
-    "format": "npx prettier --write 'index.ts' && npx prettier --write 'src/coordinates.ts'",
+    "format": "npx prettier --write 'index.ts' && npx prettier --write 'src/coordinates.ts' && npx prettier --write 'test/main.test.js'",
     "test": "jest"
   },
   "devDependencies": {

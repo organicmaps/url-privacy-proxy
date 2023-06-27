@@ -20,4 +20,4 @@ Use `npx wrangler dev` for development using Cloudflare, or `npx wrangler dev --
 
 ## Testing
 
-Run `npm test` or `jest` to test the deployed proxy with some earlier feeded URIs.
+Run `npm start` and then `npm test` or `jest` in a different terminal to test the proxy with some earlier feeded URIs.

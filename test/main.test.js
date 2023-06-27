@@ -1,3 +1,4 @@
+const axios = require('axios');
 jest.setTimeout(60000000);
 const testUrls = [
   ['https://maps.app.goo.gl/ZLcuEvpc2zLow752A?g_st=ic', 'geo:47.3842845,8.5744797'],

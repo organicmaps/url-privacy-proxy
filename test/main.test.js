@@ -1,4 +1,3 @@
-const axios = require('axios');
 jest.setTimeout(60000000);
 const testUrls = [
   ['https://maps.app.goo.gl/ZLcuEvpc2zLow752A?g_st=ic', 'geo:47.3842845,8.5744797'],
@@ -17,9 +16,9 @@ const testUrls = [
 ];
 
 test.each(testUrls)('returns expected JSON response for URL %s', async (inputUrl, expectedGeoUrl) => {
-  const response = await axios.get(`https://url-un.kartikay-2101ce32.workers.dev/coordinates?url=${inputUrl}`);
+  const response = await fetch(`https://url-un.kartikay-2101ce32.workers.dev/coordinates?url=${inputUrl}`);
   console.log(inputUrl);
   expect(response.status).toBe(200);
-  const jsonData = response.data.url;
-  expect(jsonData.geo).toEqual(expectedGeoUrl);
+  const jsonData = await response.json();
+  expect(jsonData.url.geo).toEqual(expectedGeoUrl);
 });

@@ -153,7 +153,7 @@ export async function getCoordinates(request) {
             }
             var response = await fetch(url);
             var results = await gatherResponse(response);
-            // console.log(results)
+            console.log(results)
             try {
               console.log('first');
               var position = results.indexOf(';markers');
@@ -162,24 +162,56 @@ export async function getCoordinates(request) {
               lati = link.split('%2C')[0];
               lng = link.split('%2C')[1].split('%7C')[0];
             } catch {
-              position = results.indexOf('https://www.google.com/maps/preview/place/');
-              link = results.substring(position - 1, position + 250);
-              var val = link.split('@')[1];
               try {
-                lati = val.split(',')[0];
-                lng = val.split(',')[1];
-              } catch {
-                position = results.indexOf('https://maps.google.com/maps/api/staticmap?center=');
+                console.log('second')
+                position = results.indexOf('https://www.google.com/maps/preview/place/');
                 link = results.substring(position - 1, position + 250);
-                var latlng = link.split('=')[1];
-                lati = latlng.split('%2C')[0];
-                lng = latlng.split('%2C')[1].split('&')[0];
+                var val = link.split('@')[1];
+                try {
+                  console.log('testing')
+                  console.log(val,link)
+                  lati = val.split(',')[0];
+                  lng = val.split(',')[1];
+                  lati = lati.toString()
+                  lng = lng.toString()
+                } catch {
+                  console.log('third')
+                  position = results.indexOf('https://maps.google.com/maps/api/staticmap?center=');
+                  link = results.substring(position - 1, position + 250);
+                  var latlng = link.split('=')[1];
+                  lati = latlng.split('%2C')[0];
+                  lng = latlng.split('%2C')[1].split('&')[0];
+                }
+              }
+              catch {
+                try {
+                  console.log('fourth')
+                  console.log('here')
+                  position =results.indexOf('https://www.google.com/maps/place/')
+                  link = results.substring(position - 1, position + 250);
+                  var val = link.split('@')[1];
+                  console.log(val)
+                  lati = val.split(',')[0];
+                  lng = val.split(',')[1];
+                }
+                catch {
+                  console.log('fourth')
+                  console.log('here')
+                  let searchString = 'https://www.google.com/maps/search/'
+                  position = searchString.length + results.indexOf('https://www.google.com/maps/search/')
+                  link = results.substring(position,position+250)
+                  console.log(link)
+                  lati = link.split(',')[0]
+                  lng = link.split(',')[1].split('?')[0]
+                }
               }
             }
           }
         }
       }
     });
+    console.log(lati)
+    console.log(lng)
   lati = decodeURIComponent(decodeURIComponent(lati.toString())).trim();
   lng = decodeURIComponent(decodeURIComponent(lng.toString())).trim();
   console.log(lati, lng);

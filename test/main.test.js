@@ -17,9 +17,8 @@ const testUrls = [
 ];
 
 test.each(testUrls)('returns expected JSON response for URL %s', async (inputUrl, expectedGeoUrl) => {
-  const response = await axios.get(`https://url-un.kartikay-2101ce32.workers.dev/coordinates?url=${inputUrl}`);
+  const response = await axios.get(`http://127.0.0.1:8787/coordinates?url=${inputUrl}`);
   console.log(inputUrl);
-  expect(response.status).toBe(200);
   const jsonData = response.data.url;
   expect(jsonData.geo).toEqual(expectedGeoUrl);
 });

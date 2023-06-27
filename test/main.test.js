@@ -11,9 +11,9 @@ const testUrls = [
   ['https://maps.app.goo.gl/9ivZQ71CKMqRPDtQA', 'geo:41.0102214,28.9739212'],
   ['https://goo.gl/maps/3qq8ft64MRUWxjxG6', 'geo:40.648425,-100.822401'],
   ['https://goo.gl/maps/Dyck9mYMKEoVzhJ18', 'geo:28.385307,79.438022'],
-  ['https://goo.gl/maps/TZjyL4yiFh5XykYR7','geo:28.4051028,79.448115'],
-  ['https://goo.gl/maps/tKZf9gcTgyuQQ2vH6','geo:27.1751448,78.0421422'],
-  ['https://goo.gl/maps/GqmBWG2TmzNWiJSh6','geo:26.792162500000014,82.19989062499997'],
+  ['https://goo.gl/maps/TZjyL4yiFh5XykYR7', 'geo:28.4051028,79.448115'],
+  ['https://goo.gl/maps/tKZf9gcTgyuQQ2vH6', 'geo:27.1751448,78.0421422'],
+  ['https://goo.gl/maps/GqmBWG2TmzNWiJSh6', 'geo:26.792162500000014,82.19989062499997'],
 ];
 
 test.each(testUrls)('returns expected JSON response for URL %s', async (inputUrl, expectedGeoUrl) => {

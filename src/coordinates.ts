@@ -81,10 +81,10 @@ export async function getCoordinates(request) {
       const arrLength = array.length;
       const path = pathname + search + hash;
       try {
-        console.log(url)
+        console.log(url);
         const qParam = urlObj.searchParams.get('q');
         if (qParam) {
-          console.log(array[arrLength - 1].split('=')[1])
+          console.log(array[arrLength - 1].split('=')[1]);
           var address = array[arrLength - 1].split('=')[1];
           link = decodeURIComponentTillSame(address);
         }
@@ -108,77 +108,75 @@ export async function getCoordinates(request) {
         lng = final.plus_code.geometry.location.lng;
       } catch {
         try {
-          console.log('hellllllooooooooooo')
+          console.log('hellllllooooooooooo');
           async function gatherResponse(response) {
             return response.text();
           }
           var response = await fetch(url);
           var results = await gatherResponse(response);
           const $ = cheerio.load(results);
-          let address = $('[itemprop="name"]').attr('content')
-          console.log(address)
-          let plucodeAddress = address.split('·')[1]
-          let plusCode = plucodeAddress.substring(1,5) + '%2B' + plucodeAddress.substring(6,9)
-          console.log(plusCode)
-          link = plucodeAddress
+          let address = $('[itemprop="name"]').attr('content');
+          console.log(address);
+          let plucodeAddress = address.split('·')[1];
+          let plusCode = plucodeAddress.substring(1, 5) + '%2B' + plucodeAddress.substring(6, 9);
+          console.log(plusCode);
+          link = plucodeAddress;
           var cityandState = link.split(',')[link.split(',').length - 3] + link.split(',')[link.split(',').length - 2];
-          console.log(cityandState)
+          console.log(cityandState);
           response = await fetch(`https://geocode.maps.co/search?q=${cityandState}`);
           results = await gatherResponse(response);
-          console.log(results)
-          results = JSON.parse(results)
+          console.log(results);
+          results = JSON.parse(results);
           var lat = results[0].lat;
           var lon = results[0].lon;
-          console.log(lat)
-          console.log(lon)
+          console.log(lat);
+          console.log(lon);
           const res = await fetch(`https://plus.codes/api?address=${lat},${lon}&email=kartikaysaxena12@gmail.com`);
           let result = await gatherResponse(res);
-          result = JSON.parse(result)
-          console.log(global_code)
+          result = JSON.parse(result);
+          console.log(global_code);
           var global_code = result.plus_code.global_code;
-          console.log(global_code)
+          console.log(global_code);
           var pc_final = global_code.substring(0, 4) + plusCode.substring(0, plusCode.length);
-          console.log(plusCode)
-          console.log(pc_final)
+          console.log(plusCode);
+          console.log(pc_final);
           let api = await fetch(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
           console.log(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
           let final = await gatherResponse(api);
-          final = JSON.parse(final)
+          final = JSON.parse(final);
           lati = final.plus_code.geometry.location.lat;
           lng = final.plus_code.geometry.location.lng;
-
-        }
-        catch {
-                  if (host === 'www.google.com' || host === 'maps.google.com') {
-          async function gatherResponse(response) {
-            return response.text();
-          }
-          var response = await fetch(url);
-          var results = await gatherResponse(response);
-          // console.log(results)
-          try {
-            console.log('first');
-            var position = results.indexOf(';markers');
-            var link = results.substring(position - 1, position + 70);
-            link = link.split('=')[1];
-            lati = link.split('%2C')[0];
-            lng = link.split('%2C')[1].split('%7C')[0];
-          } catch {
-            position = results.indexOf('https://www.google.com/maps/preview/place/');
-            link = results.substring(position - 1, position + 250);
-            var val = link.split('@')[1];
+        } catch {
+          if (host === 'www.google.com' || host === 'maps.google.com') {
+            async function gatherResponse(response) {
+              return response.text();
+            }
+            var response = await fetch(url);
+            var results = await gatherResponse(response);
+            // console.log(results)
             try {
-              lati = val.split(',')[0];
-              lng = val.split(',')[1];
+              console.log('first');
+              var position = results.indexOf(';markers');
+              var link = results.substring(position - 1, position + 70);
+              link = link.split('=')[1];
+              lati = link.split('%2C')[0];
+              lng = link.split('%2C')[1].split('%7C')[0];
             } catch {
-              position = results.indexOf('https://maps.google.com/maps/api/staticmap?center=');
+              position = results.indexOf('https://www.google.com/maps/preview/place/');
               link = results.substring(position - 1, position + 250);
-              var latlng = link.split('=')[1];
-              lati = latlng.split('%2C')[0];
-              lng = latlng.split('%2C')[1].split('&')[0];
+              var val = link.split('@')[1];
+              try {
+                lati = val.split(',')[0];
+                lng = val.split(',')[1];
+              } catch {
+                position = results.indexOf('https://maps.google.com/maps/api/staticmap?center=');
+                link = results.substring(position - 1, position + 250);
+                var latlng = link.split('=')[1];
+                lati = latlng.split('%2C')[0];
+                lng = latlng.split('%2C')[1].split('&')[0];
+              }
             }
           }
-        }
         }
       }
     });

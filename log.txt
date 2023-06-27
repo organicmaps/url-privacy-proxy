@@ -1,0 +1,3 @@
+Delegating to locally-installed wrangler@3.0.0 over global wrangler@2.12.3...
+Run `npx wrangler tail url-un` to use the local version directly.
+

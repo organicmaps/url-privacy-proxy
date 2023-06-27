@@ -1,5 +1,6 @@
 // Below is the main function to get coordinates from a specific url which is called in redirect or search route.
 // The logic of the proxy is that in the backend code of the site, there lies its coordinates but are located absurdly at different locations when made sepearate calls, but always along with a URI starting with "https://www.google.com/maps/preview/place/" or if not there then with "https://maps.google.com/maps/api/staticmap?center=". Note that if the first URI is not there then only we have to look up for the second one.
+const cheerio = require('cheerio');
 
 export async function getCoordinates(request) {
   async function gatherResponse(response) {
@@ -80,8 +81,10 @@ export async function getCoordinates(request) {
       const arrLength = array.length;
       const path = pathname + search + hash;
       try {
+        console.log(url)
         const qParam = urlObj.searchParams.get('q');
         if (qParam) {
+          console.log(array[arrLength - 1].split('=')[1])
           var address = array[arrLength - 1].split('=')[1];
           link = decodeURIComponentTillSame(address);
         }
@@ -97,14 +100,56 @@ export async function getCoordinates(request) {
         const result = await gatherResponse(res);
         var global_code = result.plus_code.global_code;
         var pc = link.split('+')[0] + '%2B' + link.split('+')[1];
-        var pc_final = global_code.substring(0, 4) + pc.substring(0, 7);
+        var pc_final = global_code.substring(0, 4) + pc.substring(0, pc.length);
         const api = await fetch(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
         console.log(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
         const final = await gatherResponse(api);
         lati = final.plus_code.geometry.location.lat;
         lng = final.plus_code.geometry.location.lng;
       } catch {
-        if (host === 'www.google.com' || host === 'maps.google.com') {
+        try {
+          console.log('hellllllooooooooooo')
+          async function gatherResponse(response) {
+            return response.text();
+          }
+          var response = await fetch(url);
+          var results = await gatherResponse(response);
+          const $ = cheerio.load(results);
+          let address = $('[itemprop="name"]').attr('content')
+          console.log(address)
+          let plucodeAddress = address.split('·')[1]
+          let plusCode = plucodeAddress.substring(1,5) + '%2B' + plucodeAddress.substring(6,9)
+          console.log(plusCode)
+          link = plucodeAddress
+          var cityandState = link.split(',')[link.split(',').length - 3] + link.split(',')[link.split(',').length - 2];
+          console.log(cityandState)
+          response = await fetch(`https://geocode.maps.co/search?q=${cityandState}`);
+          results = await gatherResponse(response);
+          console.log(results)
+          results = JSON.parse(results)
+          var lat = results[0].lat;
+          var lon = results[0].lon;
+          console.log(lat)
+          console.log(lon)
+          const res = await fetch(`https://plus.codes/api?address=${lat},${lon}&email=kartikaysaxena12@gmail.com`);
+          let result = await gatherResponse(res);
+          result = JSON.parse(result)
+          console.log(global_code)
+          var global_code = result.plus_code.global_code;
+          console.log(global_code)
+          var pc_final = global_code.substring(0, 4) + plusCode.substring(0, plusCode.length);
+          console.log(plusCode)
+          console.log(pc_final)
+          let api = await fetch(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
+          console.log(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
+          let final = await gatherResponse(api);
+          final = JSON.parse(final)
+          lati = final.plus_code.geometry.location.lat;
+          lng = final.plus_code.geometry.location.lng;
+
+        }
+        catch {
+                  if (host === 'www.google.com' || host === 'maps.google.com') {
           async function gatherResponse(response) {
             return response.text();
           }
@@ -133,6 +178,7 @@ export async function getCoordinates(request) {
               lng = latlng.split('%2C')[1].split('&')[0];
             }
           }
+        }
         }
       }
     });

@@ -28,6 +28,16 @@ export async function getCoordinates(request) {
       uri = decodedURI;
       decodedURI = decodeURI(uri);
     }
+    decodedURI = decodeURIComponentTillSame(decodedURI);
+    return decodedURI;
+  }
+  function decodeURIComponentTillSame(uri) {
+    let decodedURI = decodeURIComponent(uri);
+    while (decodedURI !== uri) {
+      console.log('yes');
+      uri = decodedURI;
+      decodedURI = decodeURIComponent(uri);
+    }
     return decodedURI;
   }
   request.query.url = decodeURITillSame(request.query.url);
@@ -57,39 +67,71 @@ export async function getCoordinates(request) {
       const urlObj = new URL(url);
       const continueParam = urlObj.searchParams.get('continue'); // sometimes while using the proxy and sending an request to the specific URI, it returns with www.google.com/sorry?continue={UNSHORTENED URI} , so this step becomes neccesary.
       if (continueParam) {
-        url = decodeURIComponent(continueParam);
-        originalUrl = decodeURIComponent(continueParam);
+        url = decodeURITillSame(continueParam);
+        url = decodeURIComponentTillSame(url);
+        url = decodeURIComponent(url);
+        originalUrl = url;
         reqBody = url;
-      } else {
       }
       var { pathname, host, hash, search } = new URL(url);
+
       var newUrl = pathname;
-      const array = newUrl.split('/');
-      if (host === 'www.google.com' || host === 'maps.google.com') {
-        async function gatherResponse(response) {
-          return response.text();
+      const array = url.split('/');
+      const arrLength = array.length;
+      const path = pathname + search + hash;
+      try {
+        const qParam = urlObj.searchParams.get('q');
+        if (qParam) {
+          var address = array[arrLength - 1].split('=')[1];
+          link = decodeURIComponentTillSame(address);
         }
-        var response = await fetch(url);
-        var results = await gatherResponse(response);
-        try {
-          var position = results.indexOf(';markers');
-          var link = results.substring(position - 1, position + 70);
-          link = link.split('=')[1];
-          lati = link.split('%2C')[0];
-          lng = link.split('%2C')[1].split('%7C')[0];
-        } catch {
-          position = results.indexOf('https://www.google.com/maps/preview/place/');
-          link = results.substring(position - 1, position + 250);
-          var val = link.split('@')[1];
+        var cityandState = link.split(',')[link.split(',').length - 2] + link.split(',')[link.split(',').length - 1];
+        async function gatherResponse(response) {
+          return response.json();
+        }
+        const response = await fetch(`https://geocode.maps.co/search?q=${cityandState}`);
+        const results = await gatherResponse(response);
+        var lat = results[0].lat;
+        var lon = results[0].lon;
+        const res = await fetch(`https://plus.codes/api?address=${lat},${lon}&email=kartikaysaxena12@gmail.com`);
+        const result = await gatherResponse(res);
+        var global_code = result.plus_code.global_code;
+        var pc = link.split('+')[0] + '%2B' + link.split('+')[1];
+        var pc_final = global_code.substring(0, 4) + pc.substring(0, 7);
+        const api = await fetch(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
+        console.log(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
+        const final = await gatherResponse(api);
+        lati = final.plus_code.geometry.location.lat;
+        lng = final.plus_code.geometry.location.lng;
+      } catch {
+        if (host === 'www.google.com' || host === 'maps.google.com') {
+          async function gatherResponse(response) {
+            return response.text();
+          }
+          var response = await fetch(url);
+          var results = await gatherResponse(response);
+          // console.log(results)
           try {
-            lati = val.split(',')[0];
-            lng = val.split(',')[1];
+            console.log('first');
+            var position = results.indexOf(';markers');
+            var link = results.substring(position - 1, position + 70);
+            link = link.split('=')[1];
+            lati = link.split('%2C')[0];
+            lng = link.split('%2C')[1].split('%7C')[0];
           } catch {
-            position = results.indexOf('https://maps.google.com/maps/api/staticmap?center=');
+            position = results.indexOf('https://www.google.com/maps/preview/place/');
             link = results.substring(position - 1, position + 250);
-            var latlng = link.split('=')[1];
-            lati = latlng.split('%2C')[0];
-            lng = latlng.split('%2C')[1].split('&')[0];
+            var val = link.split('@')[1];
+            try {
+              lati = val.split(',')[0];
+              lng = val.split(',')[1];
+            } catch {
+              position = results.indexOf('https://maps.google.com/maps/api/staticmap?center=');
+              link = results.substring(position - 1, position + 250);
+              var latlng = link.split('=')[1];
+              lati = latlng.split('%2C')[0];
+              lng = latlng.split('%2C')[1].split('&')[0];
+            }
           }
         }
       }

@@ -1,4 +1,4 @@
-/**
+/*
  * URL Privacy Proxy by Organic Maps
  * Copyright (C) 2023 Organic Maps OÜ
  *

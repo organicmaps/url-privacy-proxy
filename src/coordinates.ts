@@ -35,7 +35,6 @@ export async function getCoordinates(request) {
   function decodeURIComponentTillSame(uri) {
     let decodedURI = decodeURIComponent(uri);
     while (decodedURI !== uri) {
-      console.log('yes');
       uri = decodedURI;
       decodedURI = decodeURIComponent(uri);
     }
@@ -186,7 +185,6 @@ export async function getCoordinates(request) {
               catch {
                 try {
                   console.log('fourth')
-                  console.log('here')
                   position =results.indexOf('https://www.google.com/maps/place/')
                   link = results.substring(position - 1, position + 250);
                   var val = link.split('@')[1];
@@ -195,8 +193,7 @@ export async function getCoordinates(request) {
                   lng = val.split(',')[1];
                 }
                 catch {
-                  console.log('fourth')
-                  console.log('here')
+                  console.log('fifth')
                   let searchString = 'https://www.google.com/maps/search/'
                   position = searchString.length + results.indexOf('https://www.google.com/maps/search/')
                   link = results.substring(position,position+250)

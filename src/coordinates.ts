@@ -1,5 +1,5 @@
-// Below is the main function to get coordinates from a specific url which is called in redirect or search route.
-// The logic of the proxy is that in the backend code of the site, there lies its coordinates but are located absurdly at different locations when made sepearate calls, but always along with a URI starting with "https://www.google.com/maps/preview/place/" or if not there then with "https://maps.google.com/maps/api/staticmap?center=". Note that if the first URI is not there then only we have to look up for the second one.
+// Below is the main function to get coordinates from a specific url which is called in redirect or coordinates route.
+// The logic of the proxy is that in the back HTML code of the site, there may lie some different URIs which contain the coordinates, although it is hard to predict which one will be there so we check one by one by using try catch blocks. Also extracting coordinates from plus codes is also utilised which may not require the back HTML code.
 const cheerio = require('cheerio');
 
 export async function getCoordinates(request) {
@@ -108,12 +108,12 @@ export async function getCoordinates(request) {
         lng = final.plus_code.geometry.location.lng;
       } catch {
         try {
-          // Now this method is kind of similar like the same method, the only difference here is that the address along with the plus code is stored in the back HTML code (specifically in the meta tag here with an attribute [itemprop="name"]). Cheerio library is utilised here to load the back HTML
+          // Now this method is kind of similar like the above method, the only difference here is that the address along with the plus code is stored in the back HTML code (specifically in the meta tag here with an attribute [itemprop="name"]). Cheerio library is utilised here to load the back HTML and extract the address from the specific meta tag.
           async function gatherResponse(response) {
             return response.text(); // Returns the HTML code.
           }
           var response = await fetch(url); 
-          var results = await gatherResponse(response); // Result contains the HTML code.
+          var results = await gatherResponse(response); // results contains the HTML code.
           const $ = cheerio.load(results); // It loads the HTML code via the library which we can further access like an object.
           let address = $('[itemprop="name"]').attr('content');  // The address is stored in this. Next the same procedure is followed just like in the above use case.
           console.log(address);
@@ -186,7 +186,7 @@ export async function getCoordinates(request) {
                   lng = latlng.split('%2C')[1].split('&')[0];
                 }
               }
-              // Below are the simlar use cases with different search strings. The point of this being implemented is that there are some cases when only one URI is present in the backend which has the coordinates and we can't predict that so ww have to check them one by one using try catch statements to avoid errors.
+              // Below are the simlar use cases with different search strings. The point of this being implemented is that there are some cases when only one URI is present in the backend which has the coordinates and we can't predict that so we have to check them one by one using try catch statements to avoid errors.
               catch {
                 try {
                   console.log('fourth')
@@ -217,7 +217,7 @@ export async function getCoordinates(request) {
   lati = decodeURIComponent(decodeURIComponent(lati.toString())).trim();
   lng = decodeURIComponent(decodeURIComponent(lng.toString())).trim();
   console.log(lati, lng);
-  if (lati.charAt(0) === '+') {
+  if (lati.charAt(0) === '+') {  // Sometimes coordinates are extracted as +24.678,89.909 or +23.546,-12.845. And in these type of coordinates a positive or negative sign accompanies them, while the negative sign seems to fit with the geo URI scheme (because of negative coordinates), the positive sign isn't so we have to remove the positive sign.
     lati = lati.substring(1);
   }
   if (lng.charAt(0) === '+') {

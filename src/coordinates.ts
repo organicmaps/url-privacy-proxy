@@ -1,12 +1,10 @@
 const cheerio = require('cheerio');
 
-let continueParam; // Sometimes while using the proxy and sending an request to the specific URI, it returns with https://www.google.com/sorry/index?continue={URI} , so this step becomes neccesary.
 let array; // Stores an array which contains parts of the url which are separated if they have an "/" between them. Example:- ""https://maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" is split into array whose array[arrLength-1] will be "maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" (in some URIs this part is even smaller) as you can see this part contains plus code and address in this specific use case which will be utilised further.
 let arrLength;
 let originalUrl;
 let lati;
 let lng = null;
-let urllen;
 let link;
 let json;
 let coordinates = {
@@ -259,8 +257,10 @@ export async function getCoordinates(request: Request) {
   let reqBody = null;
   lati = null;
   lng = null;
-  urllen = request.query.url.length;
-  string = '';
+  let urllen = request.query.url.length;
+  if (request.query.url=="") {
+    return null;
+  }
   request.query.url = decodeURITillSame(request.query.url);
   originalUrl = request.query.url;
   const resp = await fetch(request.query.url, {
@@ -284,7 +284,7 @@ export async function getCoordinates(request: Request) {
   url = url.toString();
   url = encodeURI(url);
   let urlObj = new URL(url);
-  continueParam = urlObj.searchParams.get('continue'); // Sometimes while using the proxy and sending an request to the specific URI, it returns with https://www.google.com/sorry/index?continue={URI} , so this step becomes neccesary.
+  let continueParam = urlObj.searchParams.get('continue'); // Sometimes while using the proxy and sending an request to the specific URI, it returns with https://www.google.com/sorry/index?continue={URI} , so this step becomes neccesary.
   if (continueParam) {
     url = decodeURITillSame(continueParam);
     url = decodeURIComponentTillSame(url);

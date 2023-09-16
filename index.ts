@@ -5,6 +5,12 @@ const router = Router();
 
 router.get('/coordinates', async (request) => {
   const json = await getCoordinates(request);
+  if (json==null) {
+    return new Response('Bad Request', {
+      status:400,
+      statusText: 'Bad Request'
+    })
+  }
   return new Response(json, {
     headers: {
       'content-type': 'application/json;charset=UTF-8',

@@ -1,10 +1,11 @@
 import { IRequest } from 'itty-router';
 
-//const cheerio:any = require('cheerio');
-//import { load } from 'cheerio';
 import * as cheerio from 'cheerio';
 
-let continueParam; // Sometimes while using the proxy and sending an request to the specific URI, it returns with https://www.google.com/sorry/index?continue={URI} , so this step becomes neccesary.
+
+// Sometimes while using the proxy and sending a request to the specific URI, it returns with
+// https://www.google.com/sorry/index?continue={URI} , so we store 'continue' parameter.
+let continueParam;
 let array:Array<string>; // Stores an array which contains parts of the url which are separated if they have an "/" between them. Example:- ""https://maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" is split into array whose array[arrLength-1] will be "maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" (in some URIs this part is even smaller) as you can see this part contains plus code and address in this specific use case which will be utilised further.
 let arrLength:number;
 let originalUrl;
@@ -304,7 +305,12 @@ export async function getCoordinates(request: IRequest) {
   }
   let { pathname, host, hash, search } = new URL(url);
 
-  array = url.split('/'); // Stores an array which contains parts of the url which are separated if they have an "/" between them. Example:- ""https://maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" is split into array whose array[arrLength-1] will be "maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" (in some URIs this part is even smaller) as you can see this part contains plus code and address in this specific use case which will be utilised further.
+  // Stores an array which contains parts of the url which are separated if they have an "/" between them.
+  // Example:- ""https://maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990"
+  // is split into array whose array[arrLength-1] will be
+  // "maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990"
+  // (in some URIs this part is even smaller) as you can see this part contains plus code and address in this specific use case which will be utilised further.
+  array = url.split('/');
   arrLength = array.length;
   console.log('yes');
   // Iterate through each extraction function and attempt to extract coordinates
@@ -320,7 +326,10 @@ export async function getCoordinates(request: IRequest) {
         lng = decodeURIComponent(decodeURIComponent(lng.toString())).trim();
         console.log(lati, lng);
         if (lati.charAt(0) === '+') {
-          // Sometimes coordinates are extracted as +24.678,89.909 or +23.546,-12.845. And in these type of coordinates a positive or negative sign accompanies them, while the negative sign seems to fit with the geo URI scheme (because of negative coordinates), the positive sign isn't so we have to remove the positive sign.
+          // Sometimes coordinates are extracted as +24.678,89.909 or +23.546,-12.845.
+          // And in these type of coordinates a positive or negative sign accompanies them,
+          // while the negative sign seems to fit with the geo URI scheme (because of negative
+          // coordinates), the positive sign isn't so we have to remove the positive sign.
           lati = lati.substring(1);
         }
         if (lng.charAt(0) === '+') {
@@ -344,7 +353,7 @@ export async function getCoordinates(request: IRequest) {
         json = JSON.stringify(retBody, null, 2);
         break;
       }
-    } catch (error) {
+    } catch (error:any) {
       console.log(`Error while extracting coordinates: ${error.message}`);
     }
   }

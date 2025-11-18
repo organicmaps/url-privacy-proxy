@@ -39,6 +39,4 @@ router
       });
   });
 
-addEventListener('fetch', (e) => {
-  e.respondWith(router.handle(e.request));
-});
+export default { ...router }

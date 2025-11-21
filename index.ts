@@ -4,10 +4,10 @@ import { getCoordinates } from './src/coordinates';
 const router = Router();
 
 router.get('/coordinates', async (request:IRequest) => {
-  const json:string = await getCoordinates(request);
+  const json:string|null = await getCoordinates(request);
   if (json === null) {
-    return new Response(JSON.stringify({ error: 'Bad Request' }), {
-      status: 400,
+    return new Response(JSON.stringify({ error: "Can't decode coordinates from URL" }), {
+      status: 404,
       headers: {
         'content-type': 'application/json;charset=UTF-8',
       },

@@ -6,14 +6,9 @@ import * as cheerio from 'cheerio';
 // Sometimes while using the proxy and sending a request to the specific URI, it returns with
 // https://www.google.com/sorry/index?continue={URI} , so we store 'continue' parameter.
 let continueParam;
-let array:Array<string>; // Stores an array which contains parts of the url which are separated if they have an "/" between them. Example:- ""https://maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" is split into array whose array[arrLength-1] will be "maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" (in some URIs this part is even smaller) as you can see this part contains plus code and address in this specific use case which will be utilised further.
-let arrLength:number;
 let originalUrl;
-let lati;
-let lng = null;
 let urllen;
 let link;
-let json:string;
 
 interface Coords {
   latitude: string|null;
@@ -45,6 +40,23 @@ function decodeURITillSame(uri:string):string {
   return decodedURI;
 }
 
+function getCityStateFromAddress(address:string):string {
+  var parts = address.split(',');
+  var num_parts = parts.length;
+  if (num_parts >= 2)
+    return parts[num_parts-2].trim() + ', ' + parts[num_parts-1];
+  else
+    return address;
+}
+
+function extractPlusCode(address:string):string|null {
+  let result = /[A-Z0-9]{4}\+[A-Z0-9]{2}[A-Z0-9]?/.exec(address);
+  if (result !== null)
+    return result[0];
+  else
+    return null;
+}
+
 function decodeURIComponentTillSame(uri:string):string {
   // This function is often called in the code flow because sometimes Google throws highly encoded URIs.
   let decodedURI = decodeURIComponent(uri);
@@ -59,43 +71,59 @@ async function extractCoordinatesFromPlusCode(url:string) {
   // Implementation of extracting coordinates from Plus Codes
   // Return an object { latitude, longitude } if successful, otherwise null
   try {
-    console.log(url);
-    console.log(array);
-    console.log(arrLength);
+    //console.log(url);
+    //console.log(array);
+    //console.log(arrLength);
     let urlObj = new URL(url)
-    const qParam = urlObj.searchParams.get('q'); // This gets the qParam from the above mentioned part of URL and then splits them apart into plus code and address
-    if (qParam) {
-      console.log(array[arrLength - 1].split('=')[1]);
-      var address:string = array[arrLength - 1].split('=')[1];
-      link = decodeURIComponentTillSame(address);
+    // Gets the 'q' param from the above mentioned part of URL and then splits them apart into plus code and address
+    const qParam = urlObj.searchParams.get('q');
+    console.log(`qParam = ${qParam}`)
+    if (qParam === null) {
+      console.warn(`extractCoordinatesFromPlusCode: no 'q' parameter in URL`)
+      return null;
     }
-    link = decodeURITillSame(address);
-    console.log('here2');
-    var cityandState:string = link.split(',')[link.split(',').length - 2] + link.split(',')[link.split(',').length - 1]; // Now this part stores the city and state/province of which the address is of.
-    console.log('hmm');
-    const response:Response = await fetch(`https://geocode.maps.co/search?q=${cityandState}`); // This send an API request to retreive the center of the city.
+    var address:string = qParam;
+    address = decodeURIComponentTillSame(address);
+    console.log(`address = ${address}`)
+    let plus_code = extractPlusCode(address)
+    if (plus_code === null) {
+      console.warn(`extractCoordinatesFromPlusCode: can't find plus code in '${address}'`)
+      return null;
+    }
+    // Now store the city and state/province of which the address is of.
+    var cityandState:string = getCityStateFromAddress(address);
+    console.log(`cityandState = ${cityandState}`);
+    // Make an API request to retrieve the center of the city.
+    const response:Response = await fetch(`https://geocode.maps.co/search?q=${cityandState}&api_key=6920347d26971281068353khod666ae`);
     const results:any = await response.json();
-    console.log(cityandState);
-    console.log(response);
+    //console.log(cityandState);
+    //console.log(response);
+    if (results.length == 0) {
+      console.warn(`extractCoordinatesFromPlusCode2: geocode.maps.co responded with 0 results`)
+      return null;
+    }
+
     var lat = results[0].lat;
     var lon = results[0].lon;
-    const res = await fetch(`https://plus.codes/api?address=${lat},${lon}&email=kartikaysaxena12@gmail.com`); // Utilises the latitude and longitude to retreive the plus codes of the center of the city.
+    // Utilises the latitude and longitude to retrieve the plus codes of the center of the city.
+    const res = await fetch(`https://plus.codes/api?address=${lat},${lon}&email=kartikaysaxena12@gmail.com`);
     const result:any = await res.json();
     var global_code = result.plus_code.global_code;
-    var pc = link.split('+')[0] + '%2B' + link.split('+')[1];
-    var pc_final = global_code.substring(0, 4) + pc.substring(0, pc.length); // Prepares the plus code from the city center plus code and plus code in the URI and then retreive the location coordinates from the prepared plus code.
-    const api = await fetch(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
-    console.log(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
+    console.log(`global_code = ${global_code}`);
+    // Prepares the plus code from the city center plus code and plus code in the URI and then retrieve
+    // the location coordinates from the prepared plus code.
+    var pc_final = global_code.substring(0, 4) + plus_code.replace("+", "%2B");
+    //console.log(`Query API: 'https://plus.codes/api?address=${pc_final}'`);
+    const api = await fetch(`https://plus.codes/api?address=${pc_final}`);
     const final:any = await api.json();
-    lati = final.plus_code.geometry.location.lat;
+    //console.log(final)
+    lat = final.plus_code.geometry.location.lat;
     lng = final.plus_code.geometry.location.lng;
-    var coordinates = {
-      latitude: null,
-      longitude: null,
+
+    return {
+      latitude: lat,
+      longitude: lng,
     };
-    coordinates.latitude = lati;
-    coordinates.longitude = lng;
-    return coordinates;
   } catch (error) {
     console.log('Error while extracting coordinates from Plus Codes:', error);
     return null;
@@ -108,17 +136,32 @@ async function extractCoordinatesFromPlusCode2(url:string) {
     var results_raw:string = await response.text(); // results contains the HTML code.
     const $ = cheerio.load(results_raw); // It loads the HTML code via the library which we can further access like an object.
     let address = $('[itemprop="name"]').attr('content'); // The address is stored in this. Next the same procedure is followed just like in the above use case.
-    console.log(address);
-    let plucodeAddress = address.split('·')[1];
-    let plusCode = plucodeAddress.substring(1, 5) + '%2B' + plucodeAddress.substring(6, 9);
-    console.log(plusCode);
+    console.log(`address = ${address}`);
+    if (address === null || address === undefined) {
+      return null;
+    }
+    let plucodeAddress = address.split('·')[1].trim();
+    let plusCode = extractPlusCode(plucodeAddress);
+    if (plusCode === null) {
+      console.warn(`extractCoordinatesFromPlusCode2: address doesn't contain plus code '${address}'`)
+      return null;
+    }
+    console.log(`plusCode = ${plusCode}`);
     link = plucodeAddress;
     var cityandState = link.split(',')[link.split(',').length - 3] + link.split(',')[link.split(',').length - 2];
-    console.log(cityandState);
-    response = await fetch(`https://geocode.maps.co/search?q=${cityandState}`);
+    console.log(`cityandState = ${cityandState}`);
+    response = await fetch(`https://geocode.maps.co/search?q=${cityandState}&api_key=6920347d26971281068353khod666ae`);
     results_raw = await response.text();
-    console.log(results_raw);
+    if (response.status >= 400) {
+      console.warn(`extractCoordinatesFromPlusCode2: server responded with error ${response.status}\n${results_raw}`)
+      return null;
+    }
+    //console.log(results_raw);
     let results:any = JSON.parse(results_raw);
+    if (results.length == 0) {
+      console.warn(`extractCoordinatesFromPlusCode2: geocode.maps.co responded with 0 results`)
+      return null;
+    }
     var lat = results[0].lat;
     var lon = results[0].lon;
     console.log(lat);
@@ -129,16 +172,16 @@ async function extractCoordinatesFromPlusCode2(url:string) {
     console.log(global_code);
     var global_code = result.plus_code.global_code;
     console.log(global_code);
-    var pc_final = global_code.substring(0, 4) + plusCode.substring(0, plusCode.length);
+    var pc_final = global_code.substring(0, 4) + plusCode;//.substring(0, plusCode.length);
     console.log(plusCode);
     console.log(pc_final);
     let api = await fetch(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
     console.log(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
     let final_response_raw:string = await api.text();
     let final_response:any = JSON.parse(final_response_raw);
-    lati = final_response.plus_code.geometry.location.lat;
+    lat = final_response.plus_code.geometry.location.lat;
     lng = final_response.plus_code.geometry.location.lng;
-    coordinates.latitude = lati;
+    coordinates.latitude = lat;
     coordinates.longitude = lng;
     return coordinates;
   } catch (error) {
@@ -151,13 +194,17 @@ async function extractCoordinatesFromHTMLMethod1(url:string): Promise<Coords | n
   try {
     var response = await fetch(url);
     var results = await response.text();
-    console.log(results);
+    //console.log(results);
     var position = results.indexOf(';markers'); // Gets the index of ;markers in the code.
+    if (position == -1) {
+      console.warn(`extractCoordinatesFromHTMLMethod1: can't find ';markers' in HTML response`)
+      return null;
+    }
     var link = results.substring(position - 1, position + 70); // extracts the string nearby it
     link = link.split('=')[1]; // Gets the latitude and longitude from it
-    lati = link.split('%2C')[0];
+    lat = link.split('%2C')[0];
     lng = link.split('%2C')[1].split('%7C')[0];
-    coordinates.latitude = lati;
+    coordinates.latitude = lat;
     coordinates.longitude = lng;
     return coordinates;
   } catch (error) {
@@ -171,17 +218,21 @@ async function extractCoordinatesFromHTMLMethod2(url:string): Promise<Coords | n
     var response = await fetch(url);
     var results = await response.text();
     console.log(results);
-    console.log('second');
+    //console.log('second');
     let position = results.indexOf('https://www.google.com/maps/preview/place/');
+    if (position == -1) {
+      console.warn(`extractCoordinatesFromHTMLMethod2: can't find 'https://www.google.com/maps/preview/place/' in HTML output`)
+      return null;
+    }
     link = results.substring(position - 1, position + 250);
     var val = link.split('@')[1];
     console.log('testing');
     console.log(val, link);
-    lati = val.split(',')[0];
+    lat = val.split(',')[0];
     lng = val.split(',')[1];
-    lati = lati.toString();
+    lat = lat.toString();
     lng = lng.toString();
-    coordinates.latitude = lati;
+    coordinates.latitude = lat;
     coordinates.longitude = lng;
     return coordinates;
   } catch (error) {
@@ -205,9 +256,9 @@ async function extractCoordinatesFromHTMLMethod3(url:string): Promise<Coords | n
     link = results.substring(position - 1, position + 250);
     console.log('link');
     var latlng = link.split('=')[1];
-    lati = latlng.split('%2C')[0];
+    lat = latlng.split('%2C')[0];
     lng = latlng.split('%2C')[1].split('&')[0];
-    coordinates.latitude = lati;
+    coordinates.latitude = lat;
     coordinates.longitude = lng;
     return coordinates;
   } catch (error) {
@@ -226,9 +277,9 @@ async function extractCoordinatesFromHTMLMethod4(url:string): Promise<Coords | n
     console.log(link);
     var val = link.split('@')[1];
     console.log(val);
-    lati = val.split(',')[0];
+    lat = val.split(',')[0];
     lng = val.split(',')[1];
-    coordinates.latitude = lati;
+    coordinates.latitude = lat;
     coordinates.longitude = lng;
     return coordinates;
   } catch (error) {
@@ -246,9 +297,9 @@ async function extractCoordinatesFromHTMLMethod5(url:string): Promise<Coords | n
     let position = searchString.length + results.indexOf('https://www.google.com/maps/search/');
     link = results.substring(position, position + 250);
     console.log(link);
-    lati = link.split(',')[0];
+    lat = link.split(',')[0];
     lng = link.split(',')[1].split('?')[0];
-    coordinates.latitude = lati;
+    coordinates.latitude = lat;
     coordinates.longitude = lng;
     return coordinates;
   } catch (error) {
@@ -263,13 +314,13 @@ export async function getCoordinates(request: IRequest) {
     extractCoordinatesFromPlusCode2,
     extractCoordinatesFromHTMLMethod1,
     extractCoordinatesFromHTMLMethod2,
-    extractCoordinatesFromHTMLMethod3,
-    extractCoordinatesFromHTMLMethod4,
-    extractCoordinatesFromHTMLMethod5,
+    //extractCoordinatesFromHTMLMethod3,
+    //extractCoordinatesFromHTMLMethod4,
+    //extractCoordinatesFromHTMLMethod5,
   ];
-  let reqBody = null;
-  lati = null;
-  lng = null;
+  let response_json:string|null = null;
+  let lat = null;
+  let lng = null;
   urllen = request.query.url.length;
   //string = '';
   request.query.url = decodeURITillSame(request.query.url);
@@ -291,7 +342,6 @@ export async function getCoordinates(request: IRequest) {
   if (urllen > url.length) {
     url = encodeURI(request.query.url);
   }
-  reqBody = url;
   url = url.toString();
   url = encodeURI(url);
   let urlObj = new URL(url);
@@ -301,61 +351,48 @@ export async function getCoordinates(request: IRequest) {
     url = decodeURIComponentTillSame(url);
     url = decodeURIComponent(url);
     originalUrl = url;
-    reqBody = url;
   }
   let { pathname, host, hash, search } = new URL(url);
 
-  // Stores an array which contains parts of the url which are separated if they have an "/" between them.
-  // Example:- ""https://maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990"
-  // is split into array whose array[arrLength-1] will be
-  // "maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990"
-  // (in some URIs this part is even smaller) as you can see this part contains plus code and address in this specific use case which will be utilised further.
-  array = url.split('/');
-  arrLength = array.length;
-  console.log('yes');
   // Iterate through each extraction function and attempt to extract coordinates
   for (const extractionFunction of extractionFunctions) {
     try {
       const coordinates = await extractionFunction(request.query.url);
-      console.log(coordinates);
+      //console.log(coordinates);
       if (coordinates) {
-        // If coordinates are successfully extracted, update lati and lng
-        lati = coordinates.latitude || "";
+        // If coordinates are successfully extracted, update lat and lng
+        lat = coordinates.latitude || "";
         lng = coordinates.longitude || "";
-        lati = decodeURIComponent(decodeURIComponent(lati.toString())).trim();
+        lat = decodeURIComponent(decodeURIComponent(lat.toString())).trim();
         lng = decodeURIComponent(decodeURIComponent(lng.toString())).trim();
-        console.log(lati, lng);
-        if (lati.charAt(0) === '+') {
+        console.log(lat, lng);
+        if (lat.charAt(0) === '+') {
           // Sometimes coordinates are extracted as +24.678,89.909 or +23.546,-12.845.
           // And in these type of coordinates a positive or negative sign accompanies them,
           // while the negative sign seems to fit with the geo URI scheme (because of negative
           // coordinates), the positive sign isn't so we have to remove the positive sign.
-          lati = lati.substring(1);
+          lat = lat.substring(1);
         }
         if (lng.charAt(0) === '+') {
           lng = lng.substring(1);
         }
-        lati = parseFloat(lati);
+        lat = parseFloat(lat);
         lng = parseFloat(lng);
-        reqBody = `geo:${lati},${lng}`;
-        var reqDesc = {
-          geo: `${reqBody}`,
-          openstreetmap: `https://www.openstreetmap.org/?mlat=${lati}&mlon=${lng}`,
-        };
 
-        const retBody:any = {
-          url: ``,
+        const respBody:any = {
+          url: {
+            geo: `geo:${lat},${lng}`,
+            openstreetmap: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}`,
+          },
           source: `${originalUrl}`,
-          coordinates: ``,
+          coordinates: coordinates,
         };
-        retBody.coordinates = coordinates;
-        retBody.url = reqDesc;
-        json = JSON.stringify(retBody, null, 2);
+        response_json = JSON.stringify(respBody, null, 2);
         break;
       }
     } catch (error:any) {
       console.log(`Error while extracting coordinates: ${error.message}`);
     }
   }
-  return json;
+  return response_json;
 }

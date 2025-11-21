@@ -15,11 +15,6 @@ interface Coords {
   longitude: string|null;
 }
 
-let coordinates: Coords = {
-  latitude: null,
-  longitude: null,
-};
-
 function decodeURITillSame(uri:string):string {
   let decodedURI = decodeURI(uri);
   while (decodedURI !== uri) {
@@ -118,11 +113,11 @@ async function extractCoordinatesFromPlusCode(url:string) {
     const final:any = await api.json();
     //console.log(final)
     lat = final.plus_code.geometry.location.lat;
-    lng = final.plus_code.geometry.location.lng;
+    lon = final.plus_code.geometry.location.lng;
 
     return {
       latitude: lat,
-      longitude: lng,
+      longitude: lon,
     };
   } catch (error) {
     console.log('Error while extracting coordinates from Plus Codes:', error);
@@ -180,10 +175,11 @@ async function extractCoordinatesFromPlusCode2(url:string) {
     let final_response_raw:string = await api.text();
     let final_response:any = JSON.parse(final_response_raw);
     lat = final_response.plus_code.geometry.location.lat;
-    lng = final_response.plus_code.geometry.location.lng;
-    coordinates.latitude = lat;
-    coordinates.longitude = lng;
-    return coordinates;
+    lon = final_response.plus_code.geometry.location.lng;
+    return {
+      latitude: lat,
+      longitude: lon
+    };
   } catch (error) {
     console.log('Error while extracting coordinates from HTML Method 1:', error);
     return null;
@@ -202,11 +198,13 @@ async function extractCoordinatesFromHTMLMethod1(url:string): Promise<Coords | n
     }
     var link = results.substring(position - 1, position + 70); // extracts the string nearby it
     link = link.split('=')[1]; // Gets the latitude and longitude from it
-    lat = link.split('%2C')[0];
-    lng = link.split('%2C')[1].split('%7C')[0];
-    coordinates.latitude = lat;
-    coordinates.longitude = lng;
-    return coordinates;
+    let lat = link.split('%2C')[0];
+    let lng = link.split('%2C')[1].split('%7C')[0];
+
+    return {
+      latitude: lat,
+      longitude: lng
+    };
   } catch (error) {
     console.log('Error while extracting coordinates from HTML Method 2:', error);
     return null;
@@ -228,13 +226,12 @@ async function extractCoordinatesFromHTMLMethod2(url:string): Promise<Coords | n
     var val = link.split('@')[1];
     console.log('testing');
     console.log(val, link);
-    lat = val.split(',')[0];
-    lng = val.split(',')[1];
-    lat = lat.toString();
-    lng = lng.toString();
-    coordinates.latitude = lat;
-    coordinates.longitude = lng;
-    return coordinates;
+    let lat = val.split(',')[0];
+    let lon = val.split(',')[1];
+    return {
+      latitude: lat,
+      longitude: lon
+    }
   } catch (error) {
     console.log('Error while extracting coordinates from HTML Method 3:', error);
     return null;
@@ -256,11 +253,12 @@ async function extractCoordinatesFromHTMLMethod3(url:string): Promise<Coords | n
     link = results.substring(position - 1, position + 250);
     console.log('link');
     var latlng = link.split('=')[1];
-    lat = latlng.split('%2C')[0];
-    lng = latlng.split('%2C')[1].split('&')[0];
-    coordinates.latitude = lat;
-    coordinates.longitude = lng;
-    return coordinates;
+    let lat = latlng.split('%2C')[0];
+    let lon = latlng.split('%2C')[1].split('&')[0];
+    return {
+      latitude: lat,
+      longitude: lon
+    };
   } catch (error) {
     console.log('Error while extracting coordinates from HTML Method 4:', error);
     return null;
@@ -275,13 +273,14 @@ async function extractCoordinatesFromHTMLMethod4(url:string): Promise<Coords | n
     let position = results.indexOf('https://www.google.com/maps/place/');
     link = results.substring(position - 1, position + 250);
     console.log(link);
-    var val = link.split('@')[1];
-    console.log(val);
-    lat = val.split(',')[0];
-    lng = val.split(',')[1];
-    coordinates.latitude = lat;
-    coordinates.longitude = lng;
-    return coordinates;
+    var coords = link.split('@')[1];
+    console.log(coords);
+    let lat = coords.split(',')[0];
+    let lon = coords.split(',')[1];
+    return {
+      latitude: lat,
+      longitude: lon
+    };
   } catch (error) {
     console.log('Error while extracting coordinates from HTML Method 5:', error);
     return null;
@@ -297,11 +296,12 @@ async function extractCoordinatesFromHTMLMethod5(url:string): Promise<Coords | n
     let position = searchString.length + results.indexOf('https://www.google.com/maps/search/');
     link = results.substring(position, position + 250);
     console.log(link);
-    lat = link.split(',')[0];
-    lng = link.split(',')[1].split('?')[0];
-    coordinates.latitude = lat;
-    coordinates.longitude = lng;
-    return coordinates;
+    let lat = link.split(',')[0];
+    let lon = link.split(',')[1].split('?')[0];
+    return {
+      latitude: lat,
+      longitude: lon
+    };
   } catch (error) {
     console.log('Error while extracting coordinates from HTML Method 6:', error);
     return null;
@@ -309,7 +309,7 @@ async function extractCoordinatesFromHTMLMethod5(url:string): Promise<Coords | n
 }
 
 export async function getCoordinates(request: IRequest) {
-  const extractionFunctions = [
+  const extractionFunctions: ((url: string) => Promise<null | Coords>)[] = [
     extractCoordinatesFromPlusCode,
     extractCoordinatesFromPlusCode2,
     extractCoordinatesFromHTMLMethod1,
@@ -357,7 +357,7 @@ export async function getCoordinates(request: IRequest) {
   // Iterate through each extraction function and attempt to extract coordinates
   for (const extractionFunction of extractionFunctions) {
     try {
-      const coordinates = await extractionFunction(request.query.url);
+      const coordinates:Coords|null = await extractionFunction(request.query.url);
       //console.log(coordinates);
       if (coordinates) {
         // If coordinates are successfully extracted, update lat and lng

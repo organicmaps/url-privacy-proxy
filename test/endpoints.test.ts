@@ -1,14 +1,14 @@
-import { SELF } from "cloudflare:test";
-import { describe, it, expect } from "vitest";
+import { SELF } from 'cloudflare:test';
+import { describe, it, expect } from 'vitest';
 
-describe("url-privacy-proxy worker", () => {
-  it("responds with not found and proper status for /", async () => {
-    const response = await SELF.fetch("http://example.com/");
+describe('url-privacy-proxy worker', () => {
+  it('responds with not found and proper status for /', async () => {
+    const response = await SELF.fetch('http://example.com/');
     expect(response.status).toBe(404);
-    expect(await response.text()).toBe(JSON.stringify({"error":"Unknown endpoint"}));
+    expect(await response.text()).toBe(JSON.stringify({ error: 'Unknown endpoint' }));
   });
 
-  it("convert urls to coordinates", async () => {
+  it('convert urls to coordinates', async () => {
     const testUrls = [
       ['https://maps.google.com/?q=4M6J%2BVFW, Frankfurt am Main, Germany', 50.1122375, 8.6786282],
       ['https://maps.app.goo.gl/ZLcuEvpc2zLow752A?g_st=ic', 47.3842845, 8.5744797],
@@ -29,12 +29,13 @@ describe("url-privacy-proxy worker", () => {
     for (var [inputUrl, expectedLat, expectedLon] of testUrls) {
       console.log(`Decoding URL '${inputUrl}'`);
       const response = await SELF.fetch(`http://example.com/coordinates?url=${inputUrl}`);
+      expect(response.status).toEqual(200);
+
       let response_json = await response.json();
-      console.log("response = ", response_json)
+      console.log('response = ', response_json);
       let coordinates = response_json.coordinates;
       expect(coordinates.latitude).toBeCloseTo(expectedLat, 2);
       expect(coordinates.longitude).toBeCloseTo(expectedLon, 2);
     }
-
-  })
+  });
 });

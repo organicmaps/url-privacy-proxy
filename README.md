@@ -48,13 +48,15 @@ For example, construct the query using `new URLSearchParams({ url: sharedUrl })`
 
 - Decimal/DMS coordinate queries, including legacy `Name@lat,lon` labels.
 - Explicit numeric `!3dLAT!4dLON` markers in Google Maps `data=` path components.
-  Place-name text is never interpreted as marker or feature-ID data.
+  Place and search text, including preview routes and encoded route segments,
+  is never interpreted as marker or feature-ID data.
 - `maps.app.goo.gl` and `goo.gl/maps/` redirects. Every intermediate URL is
   inspected; resolving a coordinate query does not require another request.
 - Decimal CIDs and hexadecimal `ftid` identities, resolved through Google embed
   data. Hexadecimal IDs use `BigInt`, preserving all 64 bits. Recognized identities
-  in query parameters, path data, and embed `pb` payloads take precedence over
-  coordinate-query fallback.
+  in query parameters, path data, and embed `pb` payloads (decimal `!4s` or
+  hexadecimal `!1s`) take precedence over coordinate-query fallback. Unrecognized
+  embed payloads cannot fall back to an unrelated coordinate query.
 - Google Maps hosts on the 187 domains in Google's published
   [supported domain list](https://www.google.com/supported_domains), including
   `www.google.de`, `maps.google.co.uk`, and `www.google.fr`. The checked-in

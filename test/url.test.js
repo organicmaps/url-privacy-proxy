@@ -5,6 +5,57 @@ const { record } = require('./fixtures/matterhorn.json');
 const { noFetch, request, embed, identity } = require('./helpers');
 const fixture = require('./fixtures/matterhorn.json');
 
+const textRoutes = [
+  '/maps/%70lace',
+  '/%6daps/place',
+  '/maps/search',
+  '/maps/preview/place',
+  '/maps/preview/search',
+  '/maps/%70review/%70lace',
+];
+
+test.each(textRoutes)('does not interpret text in %s as markers or identity', async (route) => {
+  const url = `https://www.google.com${route}/data=!3d1!4d2/@47.3,8.5,16z`;
+  expect((await handleRequest(request(url), async () => new Response('no exact place'))).status).toBe(422);
+  expect(getCid(new URL(`https://www.google.com${route}/data=!1s${record[0]}/@47.3,8.5,16z`))).toBeNull();
+});
+
+test.each(textRoutes)('parses real markers after the text slot in %s', async (route) => {
+  const url = `https://www.google.com${route}/data=!3d1!4d2/@47.3,8.5,16z/data=!3d3!4d4`;
+  expect(await resolveGoogle(url, noFetch)).toEqual({
+    latitude: 3,
+    longitude: 4,
+    name: route.endsWith('search') ? null : 'data=!3d1!4d2',
+    resolution: 'marker',
+  });
+});
+
+test('does not interpret data in an unknown route shape', async () => {
+  const url = 'https://www.google.com/maps/unknown/data=!3d1!4d2';
+  expect((await handleRequest(request(url), async () => new Response('no exact place'))).status).toBe(422);
+});
+
+test.each(['', '&q=1,2'])('resolves a hexadecimal embed identity before query fallback: %s', async (query) => {
+  const url = `https://www.google.com/maps/embed?pb=!1m4!3m3!1m2!1s${record[0]}!2sMatterhorn${query}`;
+  const fetcher = jest.fn(async () => new Response(embed([record])));
+  expect(getCid(new URL(url))).toBe(identity);
+  expect(await resolveGoogle(url, fetcher)).toEqual({
+    latitude: record[2][0],
+    longitude: record[2][1],
+    name: record[1],
+    resolution: 'cid',
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+test.each(['!1sunsupported-place', '!1s0x1:0xZZ'])(
+  'does not replace an unrecognized embed identity with a coordinate query: %s',
+  async (pb) => {
+    const url = `https://www.google.com/maps/embed?${new URLSearchParams({ pb, q: '1,2' })}`;
+    expect((await handleRequest(request(url), async () => new Response(embed([record])))).status).toBe(422);
+  }
+);
+
 test.each([
   ['+', null],
   ['%20%09%20', null],

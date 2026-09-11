@@ -56,13 +56,26 @@ function coordinates(lat: number, lon: number) {
   return { latitude: lat, longitude: lon };
 }
 
-function pathData(url: URL): string {
+function mapPath(url: URL): { name: string | null; data: string } {
   // Split before decoding: an encoded slash in a place name is not a path boundary.
   const segments = url.pathname.split('/');
-  const start = segments[1] === 'maps' && segments[2] === 'place' ? 4 : 2;
-  const data = segments.slice(start).filter((segment) => segment.startsWith('data='));
+  const empty = { name: null, data: '' };
+  const segment = (index: number) => decodeURIComponent(segments[index] ?? '');
+  if (segment(1) !== 'maps') return empty;
+  const route = segment(2) === 'preview' ? 3 : 2;
+  const kind = segment(route);
+  const hasText = kind === 'place' || kind === 'search';
+  // Only known route shapes identify where structural data can begin.
+  if (!hasText && kind !== '' && kind !== 'embed' && !kind.startsWith('@') && !kind.startsWith('data=')) return empty;
+  const place = kind === 'place' ? segments[route + 1] : undefined;
+  const name = place ? decodeURIComponent(place.replace(/\+/g, ' ')).trim() || null : null;
+  const start = hasText ? route + 2 : route;
+  const data = segments
+    .slice(start)
+    .map(decodeURIComponent)
+    .filter((part) => part.startsWith('data='));
   if (data.length > 1) throw new ResolutionError('Multiple Google Maps data components are not supported.');
-  return data.length ? decodeURIComponent(data[0].slice('data='.length)) : '';
+  return { name, data: data.length ? data[0].slice('data='.length) : '' };
 }
 
 function queryPoint(text: string): Omit<Point, 'resolution'> | null {
@@ -82,18 +95,16 @@ function queryPoint(text: string): Omit<Point, 'resolution'> | null {
 
 export function parseGoogleUrl(url: URL): Point | null {
   if (url.hostname === 'maps.app.goo.gl' || url.hostname === 'goo.gl') return null;
-  // The URL has passed validateUrl. Split the raw segment before decoding encoded / and +.
-  const place = url.pathname.match(/\/maps\/place\/([^/]+)/)?.[1];
-  const name = place ? decodeURIComponent(place.replace(/\+/g, ' ')).trim() || null : null;
+  const { name, data } = mapPath(url);
   // The marker differs from /@lat,lon,zoom (the camera viewport).
-  const markers = [...pathData(url).matchAll(/!3d([^!]*)!4d([^!]*)/g)];
+  const markers = [...data.matchAll(/!3d([^!]*)!4d([^!]*)/g)];
   if (markers.length > 1) throw new ResolutionError('Multiple markers are not supported.');
   if (markers.length === 1) {
     const [, lat, lon] = markers[0];
     if (![lat, lon].every((value) => /^[+-]?\d+(?:\.\d+)?$/.test(value))) throw new ResolutionError('Invalid marker coordinates.');
     return { ...coordinates(Number(lat), Number(lon)), name, resolution: 'marker' };
   }
-  if (getCid(url) || ['query_place_id', 'ftid', 'cid'].some((key) => url.searchParams.has(key))) return null;
+  if (getCid(url) || ['query_place_id', 'ftid', 'cid', 'pb'].some((key) => url.searchParams.has(key))) return null;
   for (const key of ['q', 'query']) {
     const value = url.searchParams.get(key);
     if (value) {
@@ -105,9 +116,13 @@ export function parseGoogleUrl(url: URL): Point | null {
 }
 
 export function getCid(url: URL): string | null {
-  const decimal = url.searchParams.get('cid') || url.searchParams.get('pb')?.match(/!4s(\d+)(?:!|$)/)?.[1];
+  const pb = url.searchParams.get('pb') ?? '';
+  const decimal = url.searchParams.get('cid') || pb.match(/!4s(\d+)(?:!|$)/)?.[1];
   if (decimal && /^\d{1,20}$/.test(decimal)) return decimal;
-  const ftid = url.searchParams.get('ftid') || pathData(url).match(/!1s(0x[\da-f]+:0x[\da-f]+)(?:!|$)/i)?.[1];
+  const ftid =
+    url.searchParams.get('ftid') ||
+    mapPath(url).data.match(/!1s(0x[\da-f]+:0x[\da-f]+)(?:!|$)/i)?.[1] ||
+    pb.match(/!1s(0x[\da-f]+:0x[\da-f]+)(?:!|$)/i)?.[1];
   const hex = ftid?.match(/^0x[\da-f]+:(0x[\da-f]{1,16})$/i)?.[1];
   return hex ? BigInt(hex).toString(10) : null;
 }

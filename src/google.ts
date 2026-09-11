@@ -10,13 +10,13 @@ export interface Point {
 
 const SPECIAL_HOSTS = new Set(['maps.app.goo.gl', 'goo.gl', 'consent.google.com']);
 
-export function validateUrl(input: string): URL {
-  if (input.length > 16_384) throw new ResolutionError('Google Maps URL is too long.', 400);
+export function validateUrl(input: string, status = 400): URL {
+  if (input.length > 16_384) throw new ResolutionError('Google Maps URL is too long.', status);
   let url: URL;
   try {
     url = new URL(input);
   } catch {
-    throw new ResolutionError('Invalid Google Maps URL.', 400);
+    throw new ResolutionError('Invalid Google Maps URL.', status);
   }
   const domain = url.hostname.replace(/^(?:www\.|maps\.)/, '');
   if (
@@ -26,12 +26,12 @@ export function validateUrl(input: string): URL {
     url.username ||
     url.password
   )
-    throw new ResolutionError('Unsupported Google Maps URL.', 400);
+    throw new ResolutionError('Unsupported Google Maps URL.', status);
   let path: string;
   try {
     path = decodeURIComponent(url.pathname);
   } catch {
-    throw new ResolutionError('Malformed URL encoding.', 400);
+    throw new ResolutionError('Malformed URL encoding.', status);
   }
   const validPath =
     url.hostname === 'maps.app.goo.gl' ||
@@ -40,7 +40,7 @@ export function validateUrl(input: string): URL {
       : url.hostname === 'consent.google.com'
       ? path === '/m'
       : path === '/' || path === '/maps' || path.startsWith('/maps/'));
-  if (!validPath) throw new ResolutionError('Unsupported Google Maps path.', 400);
+  if (!validPath) throw new ResolutionError('Unsupported Google Maps path.', status);
   if (
     path.startsWith('/maps/dir') ||
     ['destination', 'saddr', 'daddr', 'waypoints'].some((key) => url.searchParams.has(key)) ||
@@ -84,7 +84,7 @@ export function parseGoogleUrl(url: URL): Point | null {
   if (url.hostname === 'maps.app.goo.gl' || url.hostname === 'goo.gl') return null;
   // The URL has passed validateUrl. Split the raw segment before decoding encoded / and +.
   const place = url.pathname.match(/\/maps\/place\/([^/]+)/)?.[1];
-  const name = place ? decodeURIComponent(place.replace(/\+/g, ' ')) : null;
+  const name = place ? decodeURIComponent(place.replace(/\+/g, ' ')).trim() || null : null;
   // The marker differs from /@lat,lon,zoom (the camera viewport).
   const markers = [...pathData(url).matchAll(/!3d([^!]*)!4d([^!]*)/g)];
   if (markers.length > 1) throw new ResolutionError('Multiple markers are not supported.');
@@ -143,7 +143,11 @@ function embedPayload(html: string): unknown {
     } else if (char === ']' && --depth === 0) {
       if (!/^\s*\)\s*;/.test(html.slice(end + 1))) break;
       // Never execute the surrounding JavaScript; JSON.parse validates the captured array.
-      return JSON.parse(html.slice(start, end + 1));
+      try {
+        return JSON.parse(html.slice(start, end + 1));
+      } catch {
+        break;
+      }
     }
   }
   throw new ResolutionError('Unrecognized Google embed payload.', 502);
@@ -152,13 +156,7 @@ function embedPayload(html: string): unknown {
 export function parseEmbed(url: URL, html: string): Point | null {
   const identity = getCid(url);
   if (!identity) return null;
-  let root: unknown;
-  try {
-    root = embedPayload(html);
-  } catch {
-    throw new ResolutionError('Unrecognized Google embed payload.', 502);
-  }
-  const pending: unknown[] = [root];
+  const pending: unknown[] = [embedPayload(html)];
   let result: Point | null = null;
   while (pending.length) {
     const value = pending.pop();

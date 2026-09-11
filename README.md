@@ -86,8 +86,9 @@ Only HTTPS requests to explicitly allowed Google Maps hosts and paths are made.
 Every redirect and nested consent destination is validated before use. Cookies
 are neither stored nor replayed, and the application does not copy client headers. Both
 short-link hosts have query parameters and fragments stripped on every hop.
-Only responses with a known CID have their HTML read, limited to 3 MB; other
-bodies are cancelled after inspecting redirects. Requests are limited to 10
+Only successful responses with a known CID have their HTML read, limited to 3 MB;
+all other responses are inspected for status and Location, then their bodies are
+cancelled without reading. Requests are limited to 10
 seconds and the entire conversion to 30 seconds. Redirect chains are bounded.
 HTTP 408, 429, selected 5xx responses, and network failures are retried twice
 after 250 ms and 750 ms within that deadline.

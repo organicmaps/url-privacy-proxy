@@ -89,7 +89,7 @@ export async function resolveGoogle(input: string, fetcher: Fetch = fetch): Prom
     if (url.hostname === 'consent.google.com') {
       const destination = url.searchParams.get('continue');
       if (!destination) throw new ResolutionError('Google consent URL has no destination.', 502);
-      url = validateUrl(destination);
+      url = validateUrl(destination, 502);
     }
     if (url.hostname === 'maps.app.goo.gl' || url.hostname === 'goo.gl') {
       // The opaque path identifies the share; discard tracking on every short-link hop.
@@ -104,7 +104,7 @@ export async function resolveGoogle(input: string, fetcher: Fetch = fetch): Prom
     visited.add(url.href);
     const response = await requestGoogle(url, fetcher, deadline, getCid(url) !== null);
     if (response.location) {
-      url = validateUrl(new URL(response.location, url).href);
+      url = validateUrl(new URL(response.location, url).href, 502);
       continue;
     }
     const result = parseEmbed(url, response.html);

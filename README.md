@@ -1,10 +1,16 @@
 # URL privacy proxy
 
-Resolve a shared Google Maps place to coordinates without forwarding the client's
-IP address, cookies, authorization, or user agent to Google. Requests from the app
-go to this service; Google sees the service's requests. The service operator and
-hosting provider still receive the client's connection. An additional Organic
-Maps proxy would be a separate deployment decision.
+Resolve a shared Google Maps place to coordinates. The resolver constructs Google
+requests with fixed application headers and does not copy client cookies,
+authorization, or user agent into them.
+
+This does not by itself establish IP anonymity: the hosting platform can add
+visitor-IP headers after the application calls `fetch`. Cloudflare documents this
+behavior for [Worker subrequests to non-Cloudflare origins](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip-in-worker-subrequests).
+Before advertising the service as hiding client IPs, complete the
+[deployed privacy check](docs/privacy-verification.md) for the actual hosting
+configuration. The service operator and hosting provider receive the client's
+connection in all cases.
 
 ## API
 
@@ -41,11 +47,14 @@ For example, construct the query using `new URLSearchParams({ url: sharedUrl })`
 ## Supported cases and accuracy
 
 - Decimal/DMS coordinate queries, including legacy `Name@lat,lon` labels.
-- Explicit `!3dLAT!4dLON` markers in Google place URLs.
+- Explicit numeric `!3dLAT!4dLON` markers in Google Maps `data=` path components.
+  Place-name text is never interpreted as marker or feature-ID data.
 - `maps.app.goo.gl` and `goo.gl/maps/` redirects. Every intermediate URL is
   inspected; resolving a coordinate query does not require another request.
 - Decimal CIDs and hexadecimal `ftid` identities, resolved through Google embed
-  data. Hexadecimal IDs use `BigInt`, preserving all 64 bits.
+  data. Hexadecimal IDs use `BigInt`, preserving all 64 bits. Recognized identities
+  in query parameters, path data, and embed `pb` payloads take precedence over
+  coordinate-query fallback.
 - Google Maps hosts on the 187 domains in Google's published
   [supported domain list](https://www.google.com/supported_domains), including
   `www.google.de`, `maps.google.co.uk`, and `www.google.fr`. The checked-in
@@ -59,7 +68,8 @@ text searches, shortened Plus Codes without resolvable identity, and standalone
 multiple-marker links are rejected. The service does not geocode a name and
 silently substitute a possibly different place.
 
-Google embed parsing uses `JSON.parse`, never script evaluation. The recognized
+Google embed parsing extracts a balanced array with quote/escape awareness and
+uses `JSON.parse`, never script evaluation. The recognized
 record is `[hexFeatureId, name, [latitude, longitude]]`, sometimes followed by
 the decimal CID. Its ID must match the requested place and any optional decimal
 ID must agree. Conflicting matching records fail. Coordinate pairs merely near
@@ -74,7 +84,7 @@ unknown structures fail rather than guessing a location.
 
 Only HTTPS requests to explicitly allowed Google Maps hosts and paths are made.
 Every redirect and nested consent destination is validated before use. Cookies
-are neither stored nor replayed, and client headers are never forwarded. Both
+are neither stored nor replayed, and the application does not copy client headers. Both
 short-link hosts have query parameters and fragments stripped on every hop.
 Only responses with a known CID have their HTML read, limited to 3 MB; other
 bodies are cancelled after inspecting redirects. Requests are limited to 10

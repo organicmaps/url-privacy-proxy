@@ -56,6 +56,15 @@ function coordinates(lat: number, lon: number) {
   return { latitude: lat, longitude: lon };
 }
 
+function pathData(url: URL): string {
+  // Split before decoding: an encoded slash in a place name is not a path boundary.
+  const segments = url.pathname.split('/');
+  const start = segments[1] === 'maps' && segments[2] === 'place' ? 4 : 2;
+  const data = segments.slice(start).filter((segment) => segment.startsWith('data='));
+  if (data.length > 1) throw new ResolutionError('Multiple Google Maps data components are not supported.');
+  return data.length ? decodeURIComponent(data[0].slice('data='.length)) : '';
+}
+
 function queryPoint(text: string): Omit<Point, 'resolution'> | null {
   // URLSearchParams already decoded this value. Do not repeatedly decode names or delimiters.
   const decimal = /^(?:(.*)@)?\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*$/.exec(text);
@@ -76,16 +85,15 @@ export function parseGoogleUrl(url: URL): Point | null {
   // The URL has passed validateUrl. Split the raw segment before decoding encoded / and +.
   const place = url.pathname.match(/\/maps\/place\/([^/]+)/)?.[1];
   const name = place ? decodeURIComponent(place.replace(/\+/g, ' ')) : null;
-  const path = decodeURIComponent(url.pathname);
   // The marker differs from /@lat,lon,zoom (the camera viewport).
-  const markers = [...path.matchAll(/!3d([^!/?]+)!4d([^!/?]+)/g)];
+  const markers = [...pathData(url).matchAll(/!3d([^!]*)!4d([^!]*)/g)];
   if (markers.length > 1) throw new ResolutionError('Multiple markers are not supported.');
   if (markers.length === 1) {
-    const point = queryPoint(`${markers[0][1]},${markers[0][2]}`);
-    if (!point) throw new ResolutionError('Invalid marker coordinates.');
-    return { ...point, name, resolution: 'marker' };
+    const [, lat, lon] = markers[0];
+    if (![lat, lon].every((value) => /^[+-]?\d+(?:\.\d+)?$/.test(value))) throw new ResolutionError('Invalid marker coordinates.');
+    return { ...coordinates(Number(lat), Number(lon)), name, resolution: 'marker' };
   }
-  if (['query_place_id', 'ftid', 'cid'].some((key) => url.searchParams.has(key))) return null;
+  if (getCid(url) || ['query_place_id', 'ftid', 'cid'].some((key) => url.searchParams.has(key))) return null;
   for (const key of ['q', 'query']) {
     const value = url.searchParams.get(key);
     if (value) {
@@ -99,7 +107,7 @@ export function parseGoogleUrl(url: URL): Point | null {
 export function getCid(url: URL): string | null {
   const decimal = url.searchParams.get('cid') || url.searchParams.get('pb')?.match(/!4s(\d+)(?:!|$)/)?.[1];
   if (decimal && /^\d{1,20}$/.test(decimal)) return decimal;
-  const ftid = url.searchParams.get('ftid') || decodeURIComponent(url.pathname).match(/!1s(0x[\da-f]+:0x[\da-f]+)/i)?.[1];
+  const ftid = url.searchParams.get('ftid') || pathData(url).match(/!1s(0x[\da-f]+:0x[\da-f]+)(?:!|$)/i)?.[1];
   const hex = ftid?.match(/^0x[\da-f]+:(0x[\da-f]{1,16})$/i)?.[1];
   return hex ? BigInt(hex).toString(10) : null;
 }
@@ -114,15 +122,39 @@ export function embedUrl(url: URL): URL | null {
   return result;
 }
 
+function embedPayload(html: string): unknown {
+  // Locate the array, then balance it without interpreting delimiters inside JSON strings.
+  const initializer = /\binitEmbed\s*\(\s*(?=\[)/.exec(html);
+  if (!initializer) return null;
+  const start = initializer.index + initializer[0].length;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let end = start; end < html.length; ++end) {
+    const char = html[end];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === '[') {
+      ++depth;
+    } else if (char === ']' && --depth === 0) {
+      if (!/^\s*\)\s*;/.test(html.slice(end + 1))) break;
+      // Never execute the surrounding JavaScript; JSON.parse validates the captured array.
+      return JSON.parse(html.slice(start, end + 1));
+    }
+  }
+  throw new ResolutionError('Unrecognized Google embed payload.', 502);
+}
+
 export function parseEmbed(url: URL, html: string): Point | null {
   const identity = getCid(url);
   if (!identity) return null;
-  // Google's embed HTML contains initEmbed(JSON). Never execute its JavaScript.
-  const payload = html.match(/\binitEmbed\((\[[\s\S]*?\])\);/);
-  if (!payload) return null;
   let root: unknown;
   try {
-    root = JSON.parse(payload[1]);
+    root = embedPayload(html);
   } catch {
     throw new ResolutionError('Unrecognized Google embed payload.', 502);
   }

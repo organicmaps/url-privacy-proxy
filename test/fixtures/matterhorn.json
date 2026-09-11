@@ -1,0 +1,13 @@
+{
+  "source": "https://maps.google.com/maps?q=Matterhorn&output=embed",
+  "captured": "2026-09-11",
+  "path": "initEmbed argument [21][3][0]",
+  "record": [
+    "0x478f3368cbb9ecd9:0x9826458cace55849",
+    "Matterhorn",
+    [
+      45.9765738,
+      7.658451899999999
+    ]
+  ]
+}

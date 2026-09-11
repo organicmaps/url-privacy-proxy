@@ -1,0 +1,13 @@
+{
+  "source": "https://maps.google.com/maps?q=Mont+Blanc+mountain+France&output=embed",
+  "captured": "2026-09-11",
+  "path": "initEmbed argument [21][3][0]",
+  "record": [
+    "0x4789459fb534be51:0xa908728c5dcec4c0",
+    "Mont Blanc",
+    [
+      45.8326223,
+      6.8651749
+    ]
+  ]
+}

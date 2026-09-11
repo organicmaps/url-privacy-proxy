@@ -1,342 +1,133 @@
-const cheerio = require('cheerio');
+import { parseGoogleUrl, parseEmbed, embedUrl, validateUrl, getCid, Point } from './google';
+import { ResolutionError } from './errors';
+export { ResolutionError } from './errors';
 
-let continueParam; // Sometimes while using the proxy and sending an request to the specific URI, it returns with https://www.google.com/sorry/index?continue={URI} , so this step becomes neccesary.
-let array; // Stores an array which contains parts of the url which are separated if they have an "/" between them. Example:- ""https://maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" is split into array whose array[arrLength-1] will be "maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" (in some URIs this part is even smaller) as you can see this part contains plus code and address in this specific use case which will be utilised further.
-let arrLength;
-let originalUrl;
-let lati;
-let lng = null;
-let urllen;
-let link;
-let json;
-let coordinates = {
-  latitude: null,
-  longitude: null,
-};
+export type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 
-function decodeURITillSame(uri) {
-  let decodedURI = decodeURI(uri);
-  while (decodedURI !== uri) {
-    uri = decodedURI;
-    decodedURI = decodeURI(uri);
-  }
+const MAX_TIME_MS = 30_000;
+const MAX_REQUEST_MS = 10_000;
+const MAX_BYTES = 3_000_000;
+const MAX_HOPS = 8;
+const RETRY_DELAYS = [250, 750];
+const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
-  function decodeURIComponentTillSame(uri) {
-    // This function is often called in the code flow because sometimes Google throws highly encoded URIs.
-    let decodedURI = decodeURIComponent(uri);
-    while (decodedURI !== uri) {
-      uri = decodedURI;
-      decodedURI = decodeURIComponent(uri);
+async function readBody(response: Response): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return text + decoder.decode();
+      bytes += value.byteLength;
+      if (bytes > MAX_BYTES) throw new ResolutionError('Google response is too large.', 502);
+      text += decoder.decode(value, { stream: true });
     }
-    return decodedURI;
-  }
-  decodedURI = decodeURIComponentTillSame(decodedURI);
-  return decodedURI;
-}
-
-function decodeURIComponentTillSame(uri) {
-  // This function is often called in the code flow because sometimes Google throws highly encoded URIs.
-  let decodedURI = decodeURIComponent(uri);
-  while (decodedURI !== uri) {
-    uri = decodedURI;
-    decodedURI = decodeURIComponent(uri);
-  }
-  return decodedURI;
-}
-
-async function extractCoordinatesFromPlusCode(url) {
-  // Implementation of extracting coordinates from Plus Codes
-  // Return an object { latitude, longitude } if successful, otherwise null
-  try {
-    console.log(url);
-    console.log(array);
-    console.log(arrLength);
-    let urlObj = new URL(url)
-    const qParam = urlObj.searchParams.get('q'); // This gets the qParam from the above mentioned part of URL and then splits them apart into plus code and address
-    if (qParam) {
-      console.log(array[arrLength - 1].split('=')[1]);
-      var address = array[arrLength - 1].split('=')[1];
-      link = decodeURIComponentTillSame(address);
-    }
-    link = decodeURITillSame(address);
-    console.log('here2');
-    var cityandState = link.split(',')[link.split(',').length - 2] + link.split(',')[link.split(',').length - 1]; // Now this part stores the city and state/province of which the address is of.
-    console.log('hmm');
-    const response = await fetch(`https://geocode.maps.co/search?q=${cityandState}`); // This send an API request to retreive the center of the city.
-    const results = await response.json();
-    console.log(cityandState);
-    console.log(response);
-    var lat = results[0].lat;
-    var lon = results[0].lon;
-    const res = await fetch(`https://plus.codes/api?address=${lat},${lon}&email=kartikaysaxena12@gmail.com`); // Utilises the latitude and longitude to retreive the plus codes of the center of the city.
-    const result = await res.json();
-    var global_code = result.plus_code.global_code;
-    var pc = link.split('+')[0] + '%2B' + link.split('+')[1];
-    var pc_final = global_code.substring(0, 4) + pc.substring(0, pc.length); // Prepares the plus code from the city center plus code and plus code in the URI and then retreive the location coordinates from the prepared plus code.
-    const api = await fetch(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
-    console.log(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
-    const final = await api.json();
-    lati = final.plus_code.geometry.location.lat;
-    lng = final.plus_code.geometry.location.lng;
-    var coordinates = {
-      latitude: null,
-      longitude: null,
-    };
-    coordinates.latitude = lati;
-    coordinates.longitude = lng;
-    return coordinates;
-  } catch (error) {
-    console.log('Error while extracting coordinates from Plus Codes:', error);
-    return null;
+  } finally {
+    await reader.cancel();
   }
 }
 
-async function extractCoordinatesFromPlusCode2(url) {
-  try {
-    var response = await fetch(url);
-    var results = await response.text(); // results contains the HTML code.
-    const $ = cheerio.load(results); // It loads the HTML code via the library which we can further access like an object.
-    let address = $('[itemprop="name"]').attr('content'); // The address is stored in this. Next the same procedure is followed just like in the above use case.
-    console.log(address);
-    let plucodeAddress = address.split('·')[1];
-    let plusCode = plucodeAddress.substring(1, 5) + '%2B' + plucodeAddress.substring(6, 9);
-    console.log(plusCode);
-    link = plucodeAddress;
-    var cityandState = link.split(',')[link.split(',').length - 3] + link.split(',')[link.split(',').length - 2];
-    console.log(cityandState);
-    response = await fetch(`https://geocode.maps.co/search?q=${cityandState}`);
-    results = await response.text();
-    console.log(results);
-    results = JSON.parse(results);
-    var lat = results[0].lat;
-    var lon = results[0].lon;
-    console.log(lat);
-    console.log(lon);
-    const res = await fetch(`https://plus.codes/api?address=${lat},${lon}&email=kartikaysaxena12@gmail.com`);
-    let result = await res.text();
-    result = JSON.parse(result);
-    console.log(global_code);
-    var global_code = result.plus_code.global_code;
-    console.log(global_code);
-    var pc_final = global_code.substring(0, 4) + plusCode.substring(0, plusCode.length);
-    console.log(plusCode);
-    console.log(pc_final);
-    let api = await fetch(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
-    console.log(`https://plus.codes/api?address=${pc_final}&email=kartikaysaxena12@gmail.com`);
-    let final = await api.text();
-    final = JSON.parse(final);
-    lati = final.plus_code.geometry.location.lat;
-    lng = final.plus_code.geometry.location.lng;
-    coordinates.latitude = lati;
-    coordinates.longitude = lng;
-    return coordinates;
-  } catch (error) {
-    console.log('Error while extracting coordinates from HTML Method 1:', error);
-    return null;
-  }
-}
-
-async function extractCoordinatesFromHTMLMethod1(url) {
-  try {
-    var response = await fetch(url);
-    var results = await response.text();
-    console.log(results);
-    var position = results.indexOf(';markers'); // Gets the index of ;markers in the code.
-    var link = results.substring(position - 1, position + 70); // extracts the string nearby it
-    link = link.split('=')[1]; // Gets the latitude and longitude from it
-    lati = link.split('%2C')[0];
-    lng = link.split('%2C')[1].split('%7C')[0];
-    coordinates.latitude = lati;
-    coordinates.longitude = lng;
-    return coordinates;
-  } catch (error) {
-    console.log('Error while extracting coordinates from HTML Method 2:', error);
-    return null;
-  }
-}
-
-async function extractCoordinatesFromHTMLMethod2(url) {
-  try {
-    var response = await fetch(url);
-    var results = await response.text();
-    console.log(results);
-    console.log('second');
-    let position = results.indexOf('https://www.google.com/maps/preview/place/');
-    link = results.substring(position - 1, position + 250);
-    var val = link.split('@')[1];
-    console.log('testing');
-    console.log(val, link);
-    lati = val.split(',')[0];
-    lng = val.split(',')[1];
-    lati = lati.toString();
-    lng = lng.toString();
-    coordinates.latitude = lati;
-    coordinates.longitude = lng;
-    return coordinates;
-  } catch (error) {
-    console.log('Error while extracting coordinates from HTML Method 3:', error);
-    return null;
-  }
-}
-
-async function extractCoordinatesFromHTMLMethod3(url) {
-  try {
-    var response = await fetch(url);
-    var results = await response.text();
-    console.log(results);
-    console.log('second');
-    let position = results.indexOf('https://www.google.com/maps/preview/place/'); // Now this is similar to the above use cases, we get the coordinates from an URI in the HTML code which starts with "https://www.google.com/maps/preview/place/"
-    link = results.substring(position - 1, position + 250);
-    var val = link.split('@')[1];
-    console.log('testing');
-    console.log(val, link);
-    position = results.indexOf('https://maps.google.com/maps/api/staticmap?center='); // Again similar, we get the coordinates from an URI in the HTML code which starts with "https://maps.google.com/maps/api/staticmap?center="
-    link = results.substring(position - 1, position + 250);
-    console.log('link');
-    var latlng = link.split('=')[1];
-    lati = latlng.split('%2C')[0];
-    lng = latlng.split('%2C')[1].split('&')[0];
-    coordinates.latitude = lati;
-    coordinates.longitude = lng;
-    return coordinates;
-  } catch (error) {
-    console.log('Error while extracting coordinates from HTML Method 4:', error);
-    return null;
-  }
-}
-// Below are the simlar use cases with different search strings. The point of this being implemented is that there are some cases when only one URI is present in the backend which has the coordinates and we can't predict that so we have to check them one by one using try catch statements to avoid errors.
-async function extractCoordinatesFromHTMLMethod4(url) {
-  try {
-    var response = await fetch(url);
-    var results = await response.text();
-    console.log('fourth');
-    let position = results.indexOf('https://www.google.com/maps/place/');
-    link = results.substring(position - 1, position + 250);
-    console.log(link);
-    var val = link.split('@')[1];
-    console.log(val);
-    lati = val.split(',')[0];
-    lng = val.split(',')[1];
-    coordinates.latitude = lati;
-    coordinates.longitude = lng;
-    return coordinates;
-  } catch (error) {
-    console.log('Error while extracting coordinates from HTML Method 5:', error);
-    return null;
-  }
-}
-
-async function extractCoordinatesFromHTMLMethod5(url) {
-  try {
-    var response = await fetch(url);
-    var results = await response.text();
-    console.log('fifth');
-    let searchString = 'https://www.google.com/maps/search/';
-    let position = searchString.length + results.indexOf('https://www.google.com/maps/search/');
-    link = results.substring(position, position + 250);
-    console.log(link);
-    lati = link.split(',')[0];
-    lng = link.split(',')[1].split('?')[0];
-    coordinates.latitude = lati;
-    coordinates.longitude = lng;
-    return coordinates;
-  } catch (error) {
-    console.log('Error while extracting coordinates from HTML Method 6:', error);
-    return null;
-  }
-}
-
-export async function getCoordinates(request: Request) {
-  const extractionFunctions = [
-    extractCoordinatesFromPlusCode,
-    extractCoordinatesFromPlusCode2,
-    extractCoordinatesFromHTMLMethod1,
-    extractCoordinatesFromHTMLMethod2,
-    extractCoordinatesFromHTMLMethod3,
-    extractCoordinatesFromHTMLMethod4,
-    extractCoordinatesFromHTMLMethod5,
-  ];
-  let reqBody = null;
-  lati = null;
-  lng = null;
-  urllen = request.query.url.length;
-  string = '';
-  request.query.url = decodeURITillSame(request.query.url);
-  originalUrl = request.query.url;
-  const resp = await fetch(request.query.url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0',
-      'Accept-Language': 'en;q=0.8',
-      DNT: '1',
-    },
-  })
-  var url = resp.url;
-
-  if (url.endsWith('ucbcb=1')) {
-    // Now this is out of pure observation that while sending too many requests over a small span of time, Google begins to mark those a activity, while sending the expanded URI with "&ucbcb=1" parameter along with it.
-    url = decodeURIComponent(url);
-    originalUrl = url;
-  }
-  if (urllen > url.length) {
-    url = encodeURI(request.query.url);
-  }
-  reqBody = url;
-  url = url.toString();
-  url = encodeURI(url);
-  let urlObj = new URL(url);
-  continueParam = urlObj.searchParams.get('continue'); // Sometimes while using the proxy and sending an request to the specific URI, it returns with https://www.google.com/sorry/index?continue={URI} , so this step becomes neccesary.
-  if (continueParam) {
-    url = decodeURITillSame(continueParam);
-    url = decodeURIComponentTillSame(url);
-    url = decodeURIComponent(url);
-    originalUrl = url;
-    reqBody = url;
-  }
-  let { pathname, host, hash, search } = new URL(url);
-
-  array = url.split('/'); // Stores an array which contains parts of the url which are separated if they have an "/" between them. Example:- ""https://maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" is split into array whose array[arrLength-1] will be "maps.google.com?q=VGR4+5MC+Falafel+M.+Sahyoun,+Beirut,+Lebanon&ftid=0x151f16e2123697fd:0x8e6626b678863990&hl=en-US&gl=tr&entry=gps&lucs=47067413&g_ep=CAISBjYuNjQuMxgAINeCAyoINDcwNjc0MTNCAlJV" (in some URIs this part is even smaller) as you can see this part contains plus code and address in this specific use case which will be utilised further.
-  arrLength = array.length;
-  console.log('yes');
-  // Iterate through each extraction function and attempt to extract coordinates
-  for (const extractionFunction of extractionFunctions) {
+async function requestGoogle(url: URL, fetcher: Fetch, deadline: number, readHtml: boolean) {
+  for (let attempt = 0; ; ++attempt) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new ResolutionError('Google resolution timed out.', 504);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.min(MAX_REQUEST_MS, remaining));
     try {
-      const coordinates = await extractionFunction(request.query.url);
-      console.log(coordinates);
-      if (coordinates) {
-        // If coordinates are successfully extracted, update lati and lng
-        lati = coordinates.latitude;
-        lng = coordinates.longitude;
-        lati = decodeURIComponent(decodeURIComponent(lati.toString())).trim();
-        lng = decodeURIComponent(decodeURIComponent(lng.toString())).trim();
-        console.log(lati, lng);
-        if (lati.charAt(0) === '+') {
-          // Sometimes coordinates are extracted as +24.678,89.909 or +23.546,-12.845. And in these type of coordinates a positive or negative sign accompanies them, while the negative sign seems to fit with the geo URI scheme (because of negative coordinates), the positive sign isn't so we have to remove the positive sign.
-          lati = lati.substring(1);
+      const headers: Record<string, string> = {
+        Accept: 'text/html',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1',
+      };
+      const response = await fetcher(url.href, { redirect: 'manual', headers, signal: controller.signal });
+      if (RETRY_STATUSES.has(response.status) && attempt < RETRY_DELAYS.length) {
+        await response.body?.cancel();
+      } else if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        await response.body?.cancel();
+        if (!location) throw new ResolutionError('Google redirect has no Location header.', 502);
+        return { location, html: '' };
+      } else {
+        if (!response.ok) {
+          await response.body?.cancel();
+          if (response.status === 404 || response.status === 410)
+            throw new ResolutionError('This Google Maps link is no longer available.');
+          throw new ResolutionError(`Google returned HTTP ${response.status}.`, 502);
         }
-        if (lng.charAt(0) === '+') {
-          lng = lng.substring(1);
+        // Only a known CID can be matched to an embed record. Other bodies cannot help.
+        if (!readHtml) {
+          await response.body?.cancel();
+          return { location: null, html: '' };
         }
-        lati = parseFloat(lati);
-        lng = parseFloat(lng);
-        reqBody = `geo:${lati},${lng}`;
-        var reqDesc = {
-          geo: `${reqBody}`,
-          openstreetmap: `https://www.openstreetmap.org/?mlat=${lati}&mlon=${lng}`,
-        };
-
-        const retBody = {
-          url: ``,
-          source: `${originalUrl}`,
-          coordinates: ``,
-        };
-        retBody.coordinates = coordinates;
-        retBody.url = reqDesc;
-        json = JSON.stringify(retBody, null, 2);
-        break;
+        return { location: null, html: await readBody(response) };
       }
     } catch (error) {
-      console.log(`Error while extracting coordinates: ${error.message}`);
+      if (error instanceof ResolutionError) throw error;
+      if (attempt >= RETRY_DELAYS.length) {
+        throw new ResolutionError(
+          controller.signal.aborted ? 'Google resolution timed out.' : 'Google request failed.',
+          controller.signal.aborted ? 504 : 502
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
     }
+    const delay = RETRY_DELAYS[attempt];
+    if (Date.now() + delay >= deadline) throw new ResolutionError('Google resolution timed out.', 504);
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
-  return json;
+}
+
+export async function resolveGoogle(input: string, fetcher: Fetch = fetch): Promise<Point> {
+  let url = validateUrl(input);
+  const deadline = Date.now() + MAX_TIME_MS;
+  const visited = new Set<string>();
+  for (let hop = 0; hop <= MAX_HOPS; ++hop) {
+    if (url.hostname === 'consent.google.com') {
+      const destination = url.searchParams.get('continue');
+      if (!destination) throw new ResolutionError('Google consent URL has no destination.', 502);
+      url = validateUrl(destination, 502);
+    }
+    if (url.hostname === 'maps.app.goo.gl' || url.hostname === 'goo.gl') {
+      // The opaque path identifies the share; discard tracking on every short-link hop.
+      url.search = '';
+      url.hash = '';
+    }
+    // Inspect every redirect before following it: later redirects can lose a pin.
+    const point = parseGoogleUrl(url);
+    if (point) return point;
+    url = embedUrl(url) ?? url;
+    if (visited.has(url.href)) throw new ResolutionError('Google redirect loop.', 502);
+    visited.add(url.href);
+    const response = await requestGoogle(url, fetcher, deadline, getCid(url) !== null);
+    if (response.location) {
+      url = validateUrl(new URL(response.location, url).href, 502);
+      continue;
+    }
+    const result = parseEmbed(url, response.html);
+    if (result) return result;
+    throw new ResolutionError('Could not resolve an exact place from this Google Maps link.');
+  }
+  throw new ResolutionError('Too many Google redirects.', 502);
+}
+
+export async function getCoordinates(input: string, fetcher: Fetch = fetch) {
+  const point = await resolveGoogle(input, fetcher);
+  const { latitude, longitude, name, resolution } = point;
+  const latLon = `${latitude},${longitude}`;
+  // Encode parentheses too: they delimit the label in Android/Organic Maps geo URIs.
+  const label = name && encodeURIComponent(name).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+  return {
+    source: input,
+    coordinates: { latitude, longitude },
+    name,
+    resolution,
+    url: {
+      geo: `geo:${latLon}${label ? `?q=${latLon}(${label})` : ''}`,
+      openstreetmap: `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}`,
+    },
+  };
 }

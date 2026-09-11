@@ -4,11 +4,14 @@ export async function handleRequest(request: Request, fetcher: Fetch = fetch): P
   const headers = { 'Content-Type': 'application/json;charset=UTF-8', 'Cache-Control': 'no-store' };
   if (request.method !== 'GET')
     return new Response(JSON.stringify({ error: 'Only GET is supported.' }), { status: 405, headers: { ...headers, Allow: 'GET' } });
-  const path = new URL(request.url).pathname;
+  const url = new URL(request.url);
+  const path = url.pathname;
   if (path !== '/coordinates' && path !== '/redirect')
     return new Response(JSON.stringify({ error: 'Not found.' }), { status: 404, headers });
   try {
-    const result = await getCoordinates(request, fetcher);
+    const input = url.searchParams.get('url');
+    if (!input) throw new ResolutionError('Missing url parameter.', 400);
+    const result = await getCoordinates(input, fetcher);
     if (path === '/redirect')
       return new Response(null, {
         status: 302,

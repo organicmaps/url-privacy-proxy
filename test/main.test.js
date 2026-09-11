@@ -25,7 +25,8 @@ test.each([
   const json = await response.json();
   expect(json.coordinates).toEqual({ latitude, longitude });
   expect(json.name).toBe(name);
-  expect(json.url.geo).toBe(`geo:${latitude},${longitude}`);
+  const latLon = `${latitude},${longitude}`;
+  expect(json.url.geo).toBe(`geo:${latLon}${name ? `?q=${latLon}(${encodeURIComponent(name)})` : ''}`);
   expect(response.headers.get('cache-control')).toBe('no-store');
 });
 
@@ -44,7 +45,12 @@ test('parses DMS with valid minute/second components', async () => {
 test('takes venue marker rather than viewport using a synthetic shared point', async () => {
   const url =
     'https://www.google.com/maps/place/Shared+point/@47.3702136,8.5394238,16z/data=!4m6!3m5!1s0x1:0x2!8m2!3d47.371461!4d8.543614!16s%2Fg%2F1tdm78zc';
-  expect(await resolveGoogle(url, noFetch)).toEqual({ latitude: 47.371461, longitude: 8.543614, name: 'Shared point', source: 'marker' });
+  expect(await resolveGoogle(url, noFetch)).toEqual({
+    latitude: 47.371461,
+    longitude: 8.543614,
+    name: 'Shared point',
+    resolution: 'marker',
+  });
 });
 
 test.each([
@@ -104,7 +110,7 @@ test('extracts a structurally identified record from the captured Matterhorn res
     latitude: 45.9765738,
     longitude: 7.658451899999999,
     name: fixture.record[1],
-    source: 'cid',
+    resolution: 'cid',
   });
 });
 
@@ -114,12 +120,12 @@ test('extracts the independently captured Mont Blanc record', () => {
     latitude: 45.8326223,
     longitude: 6.8651749,
     name: montBlanc.record[1],
-    source: 'cid',
+    resolution: 'cid',
   });
 });
 
 test('supports the optional decimal CID field only when it agrees', () => {
-  expect(parseEmbed(new URL(cidUrl), embed([[...fixture.record, '10963526813378500681']]))?.source).toBe('cid');
+  expect(parseEmbed(new URL(cidUrl), embed([[...fixture.record, '10963526813378500681']]))?.resolution).toBe('cid');
   expect(parseEmbed(new URL(cidUrl), embed([[...fixture.record, '123']]))).toBeNull();
 });
 
@@ -176,7 +182,7 @@ test('does not evaluate JavaScript in an embed response', () => {
 test('converts a 64-bit ftid without Number precision loss', async () => {
   const fetcher = jest.fn(async () => new Response(embed([fixture.record])));
   const point = await resolveGoogle(`https://maps.google.com/?q=1,2&ftid=${fixture.record[0]}`, fetcher);
-  expect(point.source).toBe('cid');
+  expect(point.resolution).toBe('cid');
   expect(new URL(fetcher.mock.calls[0][0]).searchParams.get('cid')).toBe('10963526813378500681');
 });
 
@@ -201,7 +207,7 @@ test('concurrent conversions keep their results separate', async () => {
 test('retries transient errors but not permanent failures', async () => {
   const retry = jest
     .fn()
-    .mockImplementationOnce(async () => new Response('', { status: 404 }))
+    .mockImplementationOnce(async () => new Response('', { status: 503 }))
     .mockImplementationOnce(async () => redirect('https://maps.google.com/?q=1,2'));
   expect((await resolveGoogle('https://maps.app.goo.gl/example', retry)).latitude).toBe(1);
   expect(retry).toHaveBeenCalledTimes(2);

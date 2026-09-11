@@ -1,26 +1,14 @@
 import { ResolutionError } from './errors';
+import { GOOGLE_DOMAINS } from './google-domains';
 
 export interface Point {
   latitude: number;
   longitude: number;
   name: string | null;
-  source: 'query' | 'marker' | 'cid';
+  resolution: 'query' | 'marker' | 'cid';
 }
 
-const HOSTS = new Set([
-  'maps.app.goo.gl',
-  'goo.gl',
-  'consent.google.com',
-  'google.com',
-  'www.google.com',
-  'maps.google.com',
-  'google.al',
-  'www.google.al',
-  'maps.google.al',
-  'google.ge',
-  'www.google.ge',
-  'maps.google.ge',
-]);
+const SPECIAL_HOSTS = new Set(['maps.app.goo.gl', 'goo.gl', 'consent.google.com']);
 
 export function validateUrl(input: string): URL {
   if (input.length > 16_384) throw new ResolutionError('Google Maps URL is too long.', 400);
@@ -30,7 +18,14 @@ export function validateUrl(input: string): URL {
   } catch {
     throw new ResolutionError('Invalid Google Maps URL.', 400);
   }
-  if (url.protocol !== 'https:' || !HOSTS.has(url.hostname) || url.port || url.username || url.password)
+  const domain = url.hostname.replace(/^(?:www\.|maps\.)/, '');
+  if (
+    url.protocol !== 'https:' ||
+    !(SPECIAL_HOSTS.has(url.hostname) || GOOGLE_DOMAINS.has(domain)) ||
+    url.port ||
+    url.username ||
+    url.password
+  )
     throw new ResolutionError('Unsupported Google Maps URL.', 400);
   let path: string;
   try {
@@ -61,7 +56,7 @@ function coordinates(lat: number, lon: number) {
   return { latitude: lat, longitude: lon };
 }
 
-function queryPoint(text: string): Omit<Point, 'source'> | null {
+function queryPoint(text: string): Omit<Point, 'resolution'> | null {
   // URLSearchParams already decoded this value. Do not repeatedly decode names or delimiters.
   const decimal = /^(?:(.*)@)?\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*$/.exec(text);
   if (decimal) return { ...coordinates(Number(decimal[2]), Number(decimal[3])), name: decimal[1]?.trim() || null };
@@ -78,33 +73,30 @@ function queryPoint(text: string): Omit<Point, 'source'> | null {
 
 export function parseGoogleUrl(url: URL): Point | null {
   if (url.hostname === 'maps.app.goo.gl' || url.hostname === 'goo.gl') return null;
-  let path: string;
-  try {
-    path = decodeURIComponent(url.pathname);
-  } catch {
-    throw new ResolutionError('Malformed URL encoding.', 400);
-  }
-  const name = path.match(/\/maps\/place\/([^/]+)/)?.[1].replace(/\+/g, ' ') || null;
+  // The URL has passed validateUrl. Split the raw segment before decoding encoded / and +.
+  const place = url.pathname.match(/\/maps\/place\/([^/]+)/)?.[1];
+  const name = place ? decodeURIComponent(place.replace(/\+/g, ' ')) : null;
+  const path = decodeURIComponent(url.pathname);
   // The marker differs from /@lat,lon,zoom (the camera viewport).
   const markers = [...path.matchAll(/!3d([^!/?]+)!4d([^!/?]+)/g)];
   if (markers.length > 1) throw new ResolutionError('Multiple markers are not supported.');
   if (markers.length === 1) {
     const point = queryPoint(`${markers[0][1]},${markers[0][2]}`);
     if (!point) throw new ResolutionError('Invalid marker coordinates.');
-    return { ...point, name, source: 'marker' };
+    return { ...point, name, resolution: 'marker' };
   }
   if (['query_place_id', 'ftid', 'cid'].some((key) => url.searchParams.has(key))) return null;
   for (const key of ['q', 'query']) {
     const value = url.searchParams.get(key);
     if (value) {
       const point = queryPoint(value);
-      if (point) return { ...point, name: point.name || name, source: 'query' };
+      if (point) return { ...point, name: point.name || name, resolution: 'query' };
     }
   }
   return null;
 }
 
-function cid(url: URL): string | null {
+export function getCid(url: URL): string | null {
   const decimal = url.searchParams.get('cid') || url.searchParams.get('pb')?.match(/!4s(\d+)(?:!|$)/)?.[1];
   if (decimal && /^\d{1,20}$/.test(decimal)) return decimal;
   const ftid = url.searchParams.get('ftid') || decodeURIComponent(url.pathname).match(/!1s(0x[\da-f]+:0x[\da-f]+)/i)?.[1];
@@ -114,7 +106,7 @@ function cid(url: URL): string | null {
 
 export function embedUrl(url: URL): URL | null {
   if (url.pathname === '/maps/embed' || url.searchParams.get('output') === 'embed') return null;
-  const identity = cid(url);
+  const identity = getCid(url);
   if (!identity) return null;
   const result = new URL('https://maps.google.com/maps');
   result.searchParams.set('cid', identity);
@@ -123,7 +115,7 @@ export function embedUrl(url: URL): URL | null {
 }
 
 export function parseEmbed(url: URL, html: string): Point | null {
-  const identity = cid(url);
+  const identity = getCid(url);
   if (!identity) return null;
   // Google's embed HTML contains initEmbed(JSON). Never execute its JavaScript.
   const payload = html.match(/\binitEmbed\((\[[\s\S]*?\])\);/);
@@ -153,7 +145,7 @@ export function parseEmbed(url: URL, html: string): Point | null {
     ) {
       const hex = value[0].match(/^0x[\da-f]+:(0x[\da-f]{1,16})$/i)?.[1];
       if (!hex || BigInt(hex).toString(10) !== identity) continue;
-      const point = { ...coordinates(value[2][0], value[2][1]), name: value[1], source: 'cid' as const };
+      const point = { ...coordinates(value[2][0], value[2][1]), name: value[1], resolution: 'cid' as const };
       if (result && (result.latitude !== point.latitude || result.longitude !== point.longitude || result.name !== point.name))
         throw new ResolutionError('Conflicting records for the Google place.');
       result = point;

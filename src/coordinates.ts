@@ -1,4 +1,4 @@
-import { parseGoogleUrl, parseEmbed, embedUrl, validateUrl, Point } from './google';
+import { parseGoogleUrl, parseEmbed, embedUrl, validateUrl, getCid, Point } from './google';
 import { ResolutionError } from './errors';
 export { ResolutionError } from './errors';
 
@@ -9,7 +9,7 @@ const MAX_REQUEST_MS = 10_000;
 const MAX_BYTES = 3_000_000;
 const MAX_HOPS = 8;
 const RETRY_DELAYS = [250, 750];
-const RETRY_STATUSES = new Set([404, 408, 429, 500, 502, 503, 504]);
+const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 async function readBody(response: Response): Promise<string> {
   if (!response.body) return '';
@@ -30,7 +30,7 @@ async function readBody(response: Response): Promise<string> {
   }
 }
 
-async function requestGoogle(url: URL, fetcher: Fetch, deadline: number, cookies: Map<string, string>) {
+async function requestGoogle(url: URL, fetcher: Fetch, deadline: number, readHtml: boolean) {
   for (let attempt = 0; ; ++attempt) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new ResolutionError('Google resolution timed out.', 504);
@@ -42,16 +42,7 @@ async function requestGoogle(url: URL, fetcher: Fetch, deadline: number, cookies
         'Accept-Language': 'en-US,en;q=0.9',
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1',
       };
-      // Cookies belong to one conversion and one origin. Never forward client cookies.
-      if (cookies.size) headers.Cookie = [...cookies].map(([key, value]) => `${key}=${value}`).join('; ');
       const response = await fetcher(url.href, { redirect: 'manual', headers, signal: controller.signal });
-      const cookieHeaders = response.headers as Headers & { getSetCookie?: () => string[] };
-      const values = cookieHeaders.getSetCookie?.() ?? (response.headers.get('set-cookie') ? [response.headers.get('set-cookie')!] : []);
-      for (const value of values) {
-        const pair = value.split(';', 1)[0];
-        const separator = pair.indexOf('=');
-        if (separator > 0) cookies.set(pair.slice(0, separator).trim(), pair.slice(separator + 1));
-      }
       if (RETRY_STATUSES.has(response.status) && attempt < RETRY_DELAYS.length) {
         await response.body?.cancel();
       } else if (response.status >= 300 && response.status < 400) {
@@ -62,7 +53,14 @@ async function requestGoogle(url: URL, fetcher: Fetch, deadline: number, cookies
       } else {
         if (!response.ok) {
           await response.body?.cancel();
+          if (response.status === 404 || response.status === 410)
+            throw new ResolutionError('This Google Maps link is no longer available.');
           throw new ResolutionError(`Google returned HTTP ${response.status}.`, 502);
+        }
+        // Only a known CID can be matched to an embed record. Other bodies cannot help.
+        if (!readHtml) {
+          await response.body?.cancel();
+          return { location: null, html: '' };
         }
         return { location: null, html: await readBody(response) };
       }
@@ -85,54 +83,50 @@ async function requestGoogle(url: URL, fetcher: Fetch, deadline: number, cookies
 
 export async function resolveGoogle(input: string, fetcher: Fetch = fetch): Promise<Point> {
   let url = validateUrl(input);
-  if (url.hostname === 'maps.app.goo.gl') {
-    // g_st added by Share Sheet/Shortcuts has caused bare-pin short links to fail.
-    // The opaque path identifies the share; query parameters are not needed.
-    url.search = '';
-    url.hash = '';
-  }
   const deadline = Date.now() + MAX_TIME_MS;
   const visited = new Set<string>();
-  const jars = new Map<string, Map<string, string>>();
   for (let hop = 0; hop <= MAX_HOPS; ++hop) {
     if (url.hostname === 'consent.google.com') {
       const destination = url.searchParams.get('continue');
       if (!destination) throw new ResolutionError('Google consent URL has no destination.', 502);
       url = validateUrl(destination);
     }
+    if (url.hostname === 'maps.app.goo.gl' || url.hostname === 'goo.gl') {
+      // The opaque path identifies the share; discard tracking on every short-link hop.
+      url.search = '';
+      url.hash = '';
+    }
     // Inspect every redirect before following it: later redirects can lose a pin.
     const point = parseGoogleUrl(url);
     if (point) return point;
     url = embedUrl(url) ?? url;
-    let cookies = jars.get(url.origin);
-    if (!cookies) jars.set(url.origin, (cookies = new Map()));
-    const key = url.href + JSON.stringify([...cookies]);
-    if (visited.has(key)) throw new ResolutionError('Google redirect loop.', 502);
-    visited.add(key);
-    const response = await requestGoogle(url, fetcher, deadline, cookies);
+    if (visited.has(url.href)) throw new ResolutionError('Google redirect loop.', 502);
+    visited.add(url.href);
+    const response = await requestGoogle(url, fetcher, deadline, getCid(url) !== null);
     if (response.location) {
       url = validateUrl(new URL(response.location, url).href);
       continue;
     }
     const result = parseEmbed(url, response.html);
     if (result) return result;
-    throw new ResolutionError('Google did not expose unambiguous place coordinates.');
+    throw new ResolutionError('Could not resolve an exact place from this Google Maps link.');
   }
   throw new ResolutionError('Too many Google redirects.', 502);
 }
 
-export async function getCoordinates(request: Request, fetcher: Fetch = fetch) {
-  const input = new URL(request.url).searchParams.get('url');
-  if (!input) throw new ResolutionError('Missing url parameter.', 400);
+export async function getCoordinates(input: string, fetcher: Fetch = fetch) {
   const point = await resolveGoogle(input, fetcher);
-  const { latitude, longitude } = point;
+  const { latitude, longitude, name, resolution } = point;
+  const latLon = `${latitude},${longitude}`;
+  // Encode parentheses too: they delimit the label in Android/Organic Maps geo URIs.
+  const label = name && encodeURIComponent(name).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
   return {
     source: input,
     coordinates: { latitude, longitude },
-    name: point.name,
-    resolution: point.source,
+    name,
+    resolution,
     url: {
-      geo: `geo:${latitude},${longitude}`,
+      geo: `geo:${latLon}${label ? `?q=${latLon}(${label})` : ''}`,
       openstreetmap: `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}`,
     },
   };

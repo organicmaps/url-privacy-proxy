@@ -3,10 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "deploy": "wrangler publish",
+    "deploy": "wrangler deploy",
     "start": "wrangler dev",
-    "format": "npx prettier --write 'index.ts' && npx prettier --write 'src/coordinates.ts' && npx prettier --write 'test/main.test.js'",
-    "test": "jest"
+    "format": "prettier --write index.ts 'src/*.ts' 'test/*.js'",
+    "test": "tsc --outDir .test-build --module commonjs --noEmit false && jest --runInBand",
+    "typecheck": "tsc --noEmit",
+    "format:check": "prettier --check index.ts 'src/*.ts' 'test/*.js'",
+    "test:live": "tsc --outDir .test-build --module commonjs --noEmit false && node test/live.js"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20230419.0",
